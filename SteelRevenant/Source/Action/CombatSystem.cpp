@@ -564,10 +564,7 @@ namespace Action
 				{
 					Vector3 chaseTarget = BuildRoleTarget(enemy, player.position, player.yaw, m_tuning);
 					RepathToWorld(enemy, grid, solver, s_navMesh, chaseTarget);
-					if (enemy.path.empty() || enemy.pathCursor >= enemy.path.size())
-					{
-						RepathToWorld(enemy, grid, solver, s_navMesh, BuildRoleTarget(enemy, player.position, player.yaw, m_tuning));
-					}
+					// 二重リパス除去: 1回目と同一引数で A* を呼び直しても結果は変わらないため削除。
 					enemy.repathTimer = m_tuning.enemyRepathSec * enemy.repathIntervalScale * repathLodScale;
 				}
 

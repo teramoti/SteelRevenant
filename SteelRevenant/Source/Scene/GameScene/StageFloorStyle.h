@@ -1,64 +1,54 @@
-﻿//------------------------//------------------------
-// Contents(処理内容) ステージ床テーマの描画スタイル生成を宣言する。
-//------------------------//------------------------
-// user(作成者) Keishi Teramoto
-// Created date(作成日) 2026 / 03 / 16
-// last updated (最終更新日) 2026 / 03 / 17
-//------------------------//------------------------
 #pragma once
-
+#include <d3d11.h>
 #include <memory>
 #include <vector>
-
 #include <SimpleMath.h>
+#include <GeometricPrimitive.h>
 
-namespace SceneFx
+// 床描画コマンド 1 件分。
+struct FloorDrawCommand
 {
-	// 床の基準カラーセット。
-	struct FloorPalette
-	{
-		DirectX::SimpleMath::Color baseColor;
-		DirectX::SimpleMath::Color topColor;
-		DirectX::SimpleMath::Color panelColor;
-		DirectX::SimpleMath::Color seamColor;
-		DirectX::SimpleMath::Color accentColor;
-	};
+    DirectX::SimpleMath::Matrix    world;
+    DirectX::SimpleMath::Color     color;
+};
 
-	// 床ラインのカラーセット。
-	struct LanePalette
-	{
-		DirectX::SimpleMath::Color laneAColor;
-		DirectX::SimpleMath::Color laneBColor;
-	};
+// ステージ番号ごとの床スタイルを生成するファクトリ基底。
+class IFloorStyle
+{
+public:
+    virtual ~IFloorStyle() = default;
 
-	// 床ディテール描画用コマンド。
-	struct FloorDrawCommand
-	{
-		DirectX::SimpleMath::Matrix world;
-		DirectX::SimpleMath::Color color;
-	};
+    // 床描画コマンドリストを構築する。
+    virtual std::vector<FloorDrawCommand> BuildDetailCommands() const = 0;
 
-	// ステージ床テーマ切替 Strategy。
-	class IStageFloorStyle
-	{
-	public:
-		// 床スタイル派生を基底経由で安全に破棄する。
-		virtual ~IStageFloorStyle() = default;
+    // メインフロアの色。
+    virtual DirectX::SimpleMath::Color GetBaseColor() const = 0;
+};
 
-		// 毎フレームの床パレットを返す。
-		virtual FloorPalette BuildFloorPalette(float floorPulse) const = 0;
-		// 毎フレームの床ライン色を返す。
-		virtual LanePalette BuildLanePalette(float linePulse) const = 0;
-		// 床追加ディテールの描画コマンドを構築する。
-		virtual void BuildDetailCommands(float sceneTime, std::vector<FloorDrawCommand>& outCommands) const = 0;
-	};
+// Stage1: 外縁区画 ─ 暗い鋼板床。
+class PlatformFloorStyle : public IFloorStyle
+{
+public:
+    std::vector<FloorDrawCommand> BuildDetailCommands() const override;
+    DirectX::SimpleMath::Color    GetBaseColor()        const override;
+};
 
-	// ステージ番号に応じた床テーマ Strategy を生成する。
-	class StageFloorStyleFactory
-	{
-	public:
-		// ステージテーマ番号に応じた床スタイルを生成する。
-		static std::unique_ptr<IStageFloorStyle> Create(int stageThemeIndex);
-	};
-}
+// Stage2: 防衛回廊 ─ 青灰タイル床。
+// Bug#3修正: seamColor を 0.92/0.68/0.28 (オレンジ) から青灰へ変更。
+class CorridorFloorStyle : public IFloorStyle
+{
+public:
+    std::vector<FloorDrawCommand> BuildDetailCommands() const override;
+    DirectX::SimpleMath::Color    GetBaseColor()        const override;
+};
 
+// Stage3: 中央区中枢 ─ 円形紋様床。
+class CoreFloorStyle : public IFloorStyle
+{
+public:
+    std::vector<FloorDrawCommand> BuildDetailCommands() const override;
+    DirectX::SimpleMath::Color    GetBaseColor()        const override;
+};
+
+// ステージ番号から IFloorStyle を生成するファクトリ関数。
+std::unique_ptr<IFloorStyle> CreateFloorStyle(int stageIndex);

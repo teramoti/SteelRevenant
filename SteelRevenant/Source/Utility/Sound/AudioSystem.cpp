@@ -1,450 +1,168 @@
+//------------------------//------------------------
+// Contents(処理内容) 効果音の読み込みと再生を実装する。
+//------------------------//------------------------
+// user(作成者) Keishi Teramoto
+// Created date(作成日) 2026 / 03 / 16
+// last updated (最終更新日) 2026 / 03 / 20
+//------------------------//------------------------
 #include "AudioSystem.h"
 
-#include <algorithm>
-#include <exception>
+#include <filesystem>
+#include <vector>
 
-using namespace DirectX;
+// DirectXTK Audio が利用可能かどうかを確認する。
+// Audio.h が存在する場合のみ有効化する（プロジェクト設定依存）。
+#if __has_include(<Audio.h>)
+#define AUDIO_ENABLED 1
+#include <Audio.h>
+#endif
 
 namespace GameAudio
 {
-    namespace
+    struct AudioSystem::Impl
     {
-        constexpr float kMinPitch = -1.0f;
-        constexpr float kMaxPitch = 1.0f;
-        constexpr float kMinPan = -1.0f;
-        constexpr float kMaxPan = 1.0f;
+#if AUDIO_ENABLED
+        std::unique_ptr<DirectX::AudioEngine> engine;
+        std::unordered_map<int, std::unique_ptr<DirectX::SoundEffect>> effects;
+#endif
+        bool active = false;
+    };
+
+    AudioSystem::AudioSystem()
+        : m_impl(std::make_unique<Impl>())
+    {
     }
 
-    float AudioSystem::Clamp01(float value) const noexcept
+    // 音声ルートディレクトリを指定して AudioEngine を初期化する。
+    void AudioSystem::Initialize(const std::wstring& audioRootPath)
     {
-        return std::clamp(value, 0.0f, 1.0f);
-    }
+        m_audioRoot    = audioRootPath;
+        m_initialized  = false;
 
-    float AudioSystem::GetBusVolume(AudioBus bus) const noexcept
-    {
-        switch (bus)
-        {
-        case AudioBus::Bgm:
-            return m_volume.bgm;
-        case AudioBus::Se:
-            return m_volume.se;
-        case AudioBus::Ui:
-            return m_volume.ui;
-        default:
-            return 1.0f;
-        }
-    }
-
-    float AudioSystem::GetEffectiveOneShotVolume(const AudioCueDef& cue, float volumeScale) const noexcept
-    {
-        const float busVolume = GetBusVolume(cue.bus);
-        const float scale = std::max(0.0f, volumeScale);
-        const float finalVolume = cue.defaultVolume * busVolume * scale;
-        return Clamp01(finalVolume);
-    }
-
-    float AudioSystem::GetEffectiveInstanceVolume(const AudioCueDef& cue) const noexcept
-    {
-        const float busVolume = GetBusVolume(cue.bus);
-        const float finalVolume = cue.defaultVolume * busVolume;
-        return Clamp01(finalVolume);
-    }
-
-    bool AudioSystem::Initialize(const std::wstring& audioRoot)
-    {
+#if AUDIO_ENABLED
         try
         {
-            AUDIO_ENGINE_FLAGS flags = AudioEngine_Default;
+            DirectX::AUDIO_ENGINE_FLAGS flags = DirectX::AudioEngine_Default;
+#ifdef _DEBUG
+            flags |= DirectX::AudioEngine_Debug;
+#endif
+            m_impl->engine = std::make_unique<DirectX::AudioEngine>(flags);
+            m_impl->active = true;
 
-        #ifdef _DEBUG
-            flags |= AudioEngine_Debug;
-        #endif
+            // 効果音をあらかじめロードしておく。
+            namespace fs = std::filesystem;
+            const fs::path root(audioRootPath);
 
-            m_engine = std::make_unique<AudioEngine>(flags);
-
-            BuildCatalog(audioRoot);
-
-            if (!LoadAll())
+            for (int id = 0; id < static_cast<int>(SeId::Count); ++id)
             {
-                Shutdown();
-                return false;
+                const wchar_t* fname = GetFileName(static_cast<SeId>(id));
+                if (!fname) continue;
+
+                const fs::path filePath = root / fname;
+                if (!fs::exists(filePath)) continue;
+
+                try
+                {
+                    m_impl->effects[id] = std::make_unique<DirectX::SoundEffect>(
+                        m_impl->engine.get(), filePath.wstring().c_str());
+                }
+                catch (...) { /* ファイルが壊れている場合は無視して続行 */ }
             }
-
-            m_engine->SetMasterVolume(Clamp01(m_volume.master));
-
             m_initialized = true;
-            return true;
         }
-        catch (const std::exception&)
-        {
-            Shutdown();
-            return false;
-        }
+        catch (...) { /* Audio 初期化失敗時は無音で続行 */ }
+#endif
     }
 
+    // AudioEngine を毎フレーム更新する。
+    void AudioSystem::Update()
+    {
+#if AUDIO_ENABLED
+        if (m_impl->active && m_impl->engine)
+        {
+            if (!m_impl->engine->Update())
+            {
+                // デバイスロスト: 再初期化を試みる。
+                if (m_impl->engine->IsCriticalError())
+                {
+                    m_impl->engine->Reset();
+                }
+            }
+        }
+#endif
+    }
+
+    // 指定効果音を音量付きで再生する。
+    void AudioSystem::PlaySe(SeId id, float volume)
+    {
+#if AUDIO_ENABLED
+        if (!m_impl->active || !m_impl->engine) return;
+
+        const int key = static_cast<int>(id);
+        auto it = m_impl->effects.find(key);
+        if (it == m_impl->effects.end() || !it->second) return;
+
+        const float finalVolume = volume * m_volumeSettings.se * m_volumeSettings.master;
+        it->second->Play(finalVolume, 0.0f, 0.0f);
+#else
+        (void)id; (void)volume;
+#endif
+    }
+
+    // 音量設定を適用する。
+    void AudioSystem::ApplyVolumeSettings(const AudioVolumeSettings& settings)
+    {
+        m_volumeSettings = settings;
+#if AUDIO_ENABLED
+        if (m_impl->active && m_impl->engine)
+        {
+            m_impl->engine->SetMasterVolume(settings.master);
+        }
+#endif
+    }
+
+    // 全音声を一時停止する。
+    void AudioSystem::SuspendAll()
+    {
+#if AUDIO_ENABLED
+        if (m_impl->active && m_impl->engine)
+            m_impl->engine->Suspend();
+#endif
+    }
+
+    // 全音声を再開する。
+    void AudioSystem::ResumeAll()
+    {
+#if AUDIO_ENABLED
+        if (m_impl->active && m_impl->engine)
+            m_impl->engine->Resume();
+#endif
+    }
+
+    // リソースを解放する。
     void AudioSystem::Shutdown()
     {
-        if (!m_engine && !m_initialized)
-        {
-            return;
-        }
-
-        StopBgm(true);
-
-        if (m_engine)
-        {
-            m_engine->Suspend();
-        }
-
-        m_currentBgm.reset();
-        m_bgmEffects.clear();
-        m_seEffects.clear();
-        m_bgmDefs.clear();
-        m_seDefs.clear();
-
-        if (m_engine)
-        {
-            m_engine->TrimVoicePool();
-        }
-
-        m_engine.reset();
+#if AUDIO_ENABLED
+        m_impl->effects.clear();
+        m_impl->engine.reset();
+        m_impl->active = false;
+#endif
         m_initialized = false;
     }
 
-    void AudioSystem::BuildCatalog(const std::wstring& audioRoot)
+    // SeId に対応するファイル名を返す。
+    const wchar_t* AudioSystem::GetFileName(SeId id)
     {
-        m_bgmDefs.clear();
-        m_seDefs.clear();
-
-        const std::wstring root = audioRoot;
-
-        // training_zone は登録しません。
-        m_bgmDefs.emplace(BgmId::Title, AudioCueDef{
-            root + L"/title_theme.wav",
-            AudioBus::Bgm,
-            true,
-            1.0f
-        });
-
-        m_bgmDefs.emplace(BgmId::StageSelect, AudioCueDef{
-            root + L"/stage_select.wav",
-            AudioBus::Bgm,
-            true,
-            1.0f
-        });
-
-        m_bgmDefs.emplace(BgmId::DefenseCorridor, AudioCueDef{
-            root + L"/defense_corridor.wav",
-            AudioBus::Bgm,
-            true,
-            1.0f
-        });
-
-        m_bgmDefs.emplace(BgmId::CoreSector, AudioCueDef{
-            root + L"/core_sector.wav",
-            AudioBus::Bgm,
-            true,
-            1.0f
-        });
-
-        m_bgmDefs.emplace(BgmId::ResultClear, AudioCueDef{
-            root + L"/result_clear.wav",
-            AudioBus::Bgm,
-            false,
-            1.0f
-        });
-
-        m_bgmDefs.emplace(BgmId::ResultFail, AudioCueDef{
-            root + L"/result_fail.wav",
-            AudioBus::Bgm,
-            false,
-            1.0f
-        });
-
-        m_seDefs.emplace(SeId::UiMove, AudioCueDef{
-            root + L"/ui_move.wav",
-            AudioBus::Ui,
-            false,
-            1.0f
-        });
-
-        m_seDefs.emplace(SeId::UiConfirm, AudioCueDef{
-            root + L"/ui_confirm.wav",
-            AudioBus::Ui,
-            false,
-            1.0f
-        });
-
-        m_seDefs.emplace(SeId::UiBack, AudioCueDef{
-            root + L"/ui_back.wav",
-            AudioBus::Ui,
-            false,
-            1.0f
-        });
-
-        m_seDefs.emplace(SeId::PlayerShot, AudioCueDef{
-            root + L"/player_shot.wav",
-            AudioBus::Se,
-            false,
-            1.0f
-        });
-
-        m_seDefs.emplace(SeId::EnemyShot, AudioCueDef{
-            root + L"/enemy_shot.wav",
-            AudioBus::Se,
-            false,
-            1.0f
-        });
-
-        m_seDefs.emplace(SeId::PlayerHit, AudioCueDef{
-            root + L"/player_hit.wav",
-            AudioBus::Se,
-            false,
-            1.0f
-        });
-
-        m_seDefs.emplace(SeId::GuardBlock, AudioCueDef{
-            root + L"/guard_block.wav",
-            AudioBus::Se,
-            false,
-            1.0f
-        });
-
-        m_seDefs.emplace(SeId::MeleeSlash, AudioCueDef{
-            root + L"/melee_slash.wav",
-            AudioBus::Se,
-            false,
-            1.0f
-        });
-
-        m_seDefs.emplace(SeId::EnemyDestroy, AudioCueDef{
-            root + L"/enemy_destroy.wav",
-            AudioBus::Se,
-            false,
-            1.0f
-        });
-
-        m_seDefs.emplace(SeId::RelayStart, AudioCueDef{
-            root + L"/relay_start.wav",
-            AudioBus::Se,
-            false,
-            1.0f
-        });
-
-        m_seDefs.emplace(SeId::RelaySecure, AudioCueDef{
-            root + L"/relay_secure.wav",
-            AudioBus::Se,
-            false,
-            1.0f
-        });
-
-        m_seDefs.emplace(SeId::BeaconHeal, AudioCueDef{
-            root + L"/beacon_heal.wav",
-            AudioBus::Se,
-            false,
-            1.0f
-        });
-
-        m_seDefs.emplace(SeId::WarningAlert, AudioCueDef{
-            root + L"/warning_alert.wav",
-            AudioBus::Ui,
-            false,
-            1.0f
-        });
-
-        m_seDefs.emplace(SeId::BonusTime, AudioCueDef{
-            root + L"/bonus_time.wav",
-            AudioBus::Ui,
-            false,
-            1.0f
-        });
-    }
-
-    bool AudioSystem::LoadAll()
-    {
-        try
+        switch (id)
         {
-            m_bgmEffects.clear();
-            m_seEffects.clear();
-
-            for (const auto& [id, def] : m_bgmDefs)
-            {
-                m_bgmEffects.emplace(id, std::make_unique<SoundEffect>(m_engine.get(), def.path.c_str()));
-            }
-
-            for (const auto& [id, def] : m_seDefs)
-            {
-                m_seEffects.emplace(id, std::make_unique<SoundEffect>(m_engine.get(), def.path.c_str()));
-            }
-
-            return true;
+        case SeId::MeleeSlash:   return L"slash.wav";
+        case SeId::GuardBlock:   return L"block.wav";
+        case SeId::PlayerHit:    return L"player_hit.wav";
+        case SeId::EnemyDestroy: return L"enemy_destroy.wav";
+        case SeId::ItemPickup:   return L"item_pickup.wav";
+        case SeId::WaveClear:    return L"wave_clear.wav";
+        case SeId::GameOver:     return L"game_over.wav";
+        default:                 return nullptr;
         }
-        catch (const std::exception&)
-        {
-            return false;
-        }
-    }
-
-    void AudioSystem::Update()
-    {
-        if (!m_initialized || !m_engine)
-        {
-            return;
-        }
-
-        // DirectXTK の AudioEngine は毎フレーム Update が必要です。
-        // Update は bool を返しますが、この実装では戻り値の判定を呼び出し側に広げていません。
-        m_engine->Update();
-    }
-
-    void AudioSystem::SuspendAll()
-    {
-        if (!m_initialized || !m_engine)
-        {
-            return;
-        }
-
-        m_engine->Suspend();
-    }
-
-    void AudioSystem::ResumeAll()
-    {
-        if (!m_initialized || !m_engine)
-        {
-            return;
-        }
-
-        m_engine->Resume();
-
-        // AudioEngine の復帰後に、現在のループ BGM を再生状態へ戻したい場合は再開します。
-        if (m_currentBgm)
-        {
-            m_currentBgm->Play(true);
-            ApplyCurrentBgmVolume();
-        }
-    }
-
-    void AudioSystem::ApplyCurrentBgmVolume()
-    {
-        if (!m_currentBgm || !m_currentBgmId.has_value())
-        {
-            return;
-        }
-
-        const auto defIt = m_bgmDefs.find(*m_currentBgmId);
-        if (defIt == m_bgmDefs.end())
-        {
-            return;
-        }
-
-        const float volume = GetEffectiveInstanceVolume(defIt->second);
-        m_currentBgm->SetVolume(volume);
-    }
-
-    void AudioSystem::PlayBgm(BgmId id, bool restart)
-    {
-        if (!m_initialized || !m_engine)
-        {
-            return;
-        }
-
-        if (!restart && m_currentBgmId.has_value() && *m_currentBgmId == id && m_currentBgm)
-        {
-            return;
-        }
-
-        StopBgm(true);
-
-        const auto defIt = m_bgmDefs.find(id);
-        const auto fxIt = m_bgmEffects.find(id);
-
-        if (defIt == m_bgmDefs.end() || fxIt == m_bgmEffects.end())
-        {
-            return;
-        }
-
-        // SoundEffectInstance はループと再生中の音量変更に使います。
-        m_currentBgm = fxIt->second->CreateInstance();
-        m_currentBgmId = id;
-
-        ApplyCurrentBgmVolume();
-        m_currentBgm->Play(defIt->second.loop);
-    }
-
-    void AudioSystem::StopBgm(bool immediate)
-    {
-        if (m_currentBgm)
-        {
-            m_currentBgm->Stop(immediate);
-            m_currentBgm.reset();
-        }
-
-        m_currentBgmId.reset();
-    }
-
-    void AudioSystem::PlaySe(SeId id, float volumeScale, float pitch, float pan)
-    {
-        if (!m_initialized || !m_engine)
-        {
-            return;
-        }
-
-        const auto defIt = m_seDefs.find(id);
-        const auto fxIt = m_seEffects.find(id);
-
-        if (defIt == m_seDefs.end() || fxIt == m_seEffects.end())
-        {
-            return;
-        }
-
-        const float finalVolume = GetEffectiveOneShotVolume(defIt->second, volumeScale);
-        const float finalPitch = std::clamp(pitch, kMinPitch, kMaxPitch);
-        const float finalPan = std::clamp(pan, kMinPan, kMaxPan);
-
-        // one-shot は SoundEffect::Play を使います。
-        // ループや再生中変更が不要な SE に向いています。
-        fxIt->second->Play(finalVolume, finalPitch, finalPan);
-    }
-
-    void AudioSystem::SetMasterVolume(float value)
-    {
-        m_volume.master = Clamp01(value);
-
-        if (m_engine)
-        {
-            m_engine->SetMasterVolume(m_volume.master);
-        }
-    }
-
-    void AudioSystem::SetBusVolume(AudioBus bus, float value)
-    {
-        const float clamped = Clamp01(value);
-
-        switch (bus)
-        {
-        case AudioBus::Bgm:
-            m_volume.bgm = clamped;
-            ApplyCurrentBgmVolume();
-            break;
-
-        case AudioBus::Se:
-            m_volume.se = clamped;
-            break;
-
-        case AudioBus::Ui:
-            m_volume.ui = clamped;
-            break;
-
-        default:
-            break;
-        }
-    }
-
-    void AudioSystem::ApplyVolumeSettings(const AudioVolumeSettings& settings)
-    {
-        SetMasterVolume(settings.master);
-        SetBusVolume(AudioBus::Bgm, settings.bgm);
-        SetBusVolume(AudioBus::Se, settings.se);
-        SetBusVolume(AudioBus::Ui, settings.ui);
     }
 }

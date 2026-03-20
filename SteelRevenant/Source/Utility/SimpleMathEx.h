@@ -1,68 +1,48 @@
-﻿//------------------------//------------------------
-// Contents(処理内容) SimpleMath 拡張補助関数を宣言する。
-//------------------------//------------------------
-// user(作成者) Keishi Teramoto
-// Created date(作成日) 2026 / 03 / 16
-// last updated (最終更新日) 2026 / 03 / 17
-//------------------------//------------------------
 #pragma once
 
-//-----------------------------------------------------------------------------
-// SimpleMathEx
-//-----------------------------------------------------------------------------
-// ゲームプレイ側で共通利用する補助計算をまとめる。
-// 依存を増やさないため、単純な関数だけをここへ置く。
-// DirectXTK の要件に合わせて SimpleMath.h より先に d3d11.h を読む。
-//-----------------------------------------------------------------------------
-
-#include <d3d11.h>
-#include <SimpleMath.h>
 #include <cmath>
+#include <algorithm>
+#include <SimpleMath.h>
 
 namespace Utility
 {
-	namespace MathEx
-	{
-		// 値を指定した最小値と最大値の範囲へ収める。
-		template <typename T>
-		inline T Clamp(const T& value, const T& minValue, const T& maxValue)
-		{
-			if (value < minValue) return minValue;
-			if (value > maxValue) return maxValue;
-			return value;
-		}
+    namespace MathEx
+    {
+        // 値を [minVal, maxVal] に収める。
+        template<typename T>
+        inline T Clamp(T value, T minVal, T maxVal)
+        {
+            return std::max(minVal, std::min(maxVal, value));
+        }
 
-		// 0.0 から 1.0 の範囲へ収める。
-		inline float Clamp01(float value)
-		{
-			return Clamp<float>(value, 0.0f, 1.0f);
-		}
+        // ラジアンを [-pi, pi] に正規化する。
+        inline float WrapRadians(float r)
+        {
+            constexpr float kPi    = 3.14159265358979323846f;
+            constexpr float kTwoPi = kPi * 2.0f;
+            while (r >  kPi) r -= kTwoPi;
+            while (r < -kPi) r += kTwoPi;
+            return r;
+        }
 
-		// 長さが十分あるベクトルだけを正規化し、短い場合はゼロベクトルを返す。
-		inline DirectX::SimpleMath::Vector3 SafeNormalize(
-			const DirectX::SimpleMath::Vector3& value,
-			float epsilon = 0.00001f)
-		{
-			if (value.LengthSquared() <= epsilon)
-			{
-				return DirectX::SimpleMath::Vector3::Zero;
-			}
+        // 長さゼロベクトルを安全に正規化する（ゼロの場合はゼロを返す）。
+        inline DirectX::SimpleMath::Vector3 SafeNormalize(const DirectX::SimpleMath::Vector3& v)
+        {
+            const float lenSq = v.LengthSquared();
+            if (lenSq < 1e-8f) return DirectX::SimpleMath::Vector3::Zero;
+            return v / std::sqrt(lenSq);
+        }
 
-			DirectX::SimpleMath::Vector3 out = value;
-			out.Normalize();
-			return out;
-		}
+        // 線形補間。
+        inline float Lerp(float a, float b, float t)
+        {
+            return a + (b - a) * Clamp(t, 0.0f, 1.0f);
+        }
 
-		// 角度を -PI から PI の範囲へ折り返す。
-		inline float WrapRadians(float value)
-		{
-			const float kPi = DirectX::XM_PI;
-			const float kTwoPi = DirectX::XM_PI * 2.0f;
-			while (value > kPi) value -= kTwoPi;
-			while (value < -kPi) value += kTwoPi;
-			return value;
-		}
-	}
+        // 指数減衰ブレンド係数を返す（gain が大きいほど速い）。
+        inline float ExpBlend(float gain, float dt)
+        {
+            return Clamp(1.0f - std::exp(-gain * dt), 0.0f, 1.0f);
+        }
+    }
 }
-
-

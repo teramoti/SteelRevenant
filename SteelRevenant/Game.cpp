@@ -220,7 +220,6 @@ void Game::Finalize()
     m_mouse.reset();
     m_spriteBatch.reset();
     m_font.reset();
-    m_commonStates.reset();
     // m_graphics は DirectX11 シングルトンに統合済みのためここでは解放しない
 
     DirectX11::Dispose();

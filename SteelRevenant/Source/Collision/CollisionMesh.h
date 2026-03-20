@@ -9,7 +9,6 @@
 
 #include <wrl/client.h>
 #include <wrl.h>
-#include <wrl/client.h>
 
 #include <d3d11.h>
 #include <SimpleMath.h>

@@ -25,8 +25,8 @@ namespace Action
 		enemy.position = spawnBase + DirectX::SimpleMath::Vector3(jitterX, 0.0f, jitterZ);
 		enemy.spawnPosition = enemy.position;
 
-		enemy.hp = 40.0f + static_cast<float>(clampedDanger - 1) * 7.0f;
-		enemy.maxHp = enemy.hp;
+		// hp は後段で enemy.hp = enemy.maxHp により確定するため、ここでは maxHp のみ設定する。
+		enemy.maxHp = 40.0f + static_cast<float>(clampedDanger - 1) * 7.0f;
 		enemy.state = EnemyStateType::Idle;
 		enemy.stateTimer = 0.3f + 0.04f * static_cast<float>(spawnSerial % 6);
 		enemy.repathTimer = 0.0f;
