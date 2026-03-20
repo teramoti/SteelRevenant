@@ -1,11 +1,4 @@
-﻿//------------------------//------------------------
-// Contents(処理内容) 本編ゲームシーンの共通初期化と共有状態を宣言する。
-//------------------------//------------------------
-// user(作成者) Keishi Teramoto
-// Created date(作成日) 2026 / 03 / 16
-// last updated (最終更新日) 2026 / 03 / 17
-//------------------------//------------------------
-#pragma once
+﻿#pragma once
 
 //--------------------------------------------------------------------------------------
 // File: GameScene.h
@@ -108,8 +101,6 @@ private:
 	void UpdateCombatFrame(float dt, const Action::InputSnapshot& input);
 	// サバイバル進行と結果遷移条件を更新する。
 	void UpdateSurvivalFlow();
-	// 敵の飛翔弾を更新して命中判定を行う。
-	void UpdateEnemyProjectiles(float dt);
 	// 現在状態からライブスコアを算出する。
 	int ComputeStageScore() const;
 	// 集計した戦闘結果を保存して結果シーンへ進める。
@@ -120,7 +111,7 @@ private:
 	void DrawWorldBackdrop();
 	// 床、障害物、ギミックなどアリーナ要素を描画する。
 	void DrawWorldArena();
-	// プレイヤー、敵、弾、斬撃エフェクトを描画する。
+	// プレイヤー、敵、斬撃エフェクトを描画する。
 	void DrawWorldActors();
 	// HUD とポーズ UI を描画する。
 	void DrawUI();
@@ -214,20 +205,10 @@ private:
 		float maxCooldownSec;
 		float pulseSeed;
 	};
-	struct EnemyProjectileInfo
-	{
-		DirectX::SimpleMath::Vector3 position;
-		DirectX::SimpleMath::Vector3 velocity;
-		DirectX::SimpleMath::Color color;
-		float radius;
-		float lifetimeSec;
-		float damage;
-	};
 	std::vector<RelayNodeInfo> m_relayNodes;
 	std::vector<HazardZoneInfo> m_hazardZones;
 	std::vector<PatrolHazardInfo> m_patrolHazards;
 	std::vector<RecoveryBeaconInfo> m_recoveryBeacons;
-	std::vector<EnemyProjectileInfo> m_enemyProjectiles;
 	int m_requiredRelayCount;
 	float m_objectiveBannerTimer;
 	std::wstring m_objectiveBannerText;
@@ -264,9 +245,9 @@ private:
 	int m_recoveryBeaconUseCount;
 
 	float m_finishDelay;
+	float m_stageIntroTimer;
 	int m_stageThemeIndex;
 	bool m_resultPushed;
 	bool m_showPathDebug;
 	bool m_showHudDetail;
 };
-

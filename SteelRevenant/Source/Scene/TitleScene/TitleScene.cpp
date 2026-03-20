@@ -34,11 +34,9 @@ extern void ExitGame();
 namespace
 {
 	// タイトル演出の基本パラメータ。
-	constexpr float kTitleOrbitSpeed = 0.12f;
 	constexpr float kTransitionSec = 0.42f;
 	constexpr float kAttractHintIdleSec = 8.0f;
 	constexpr int kMenuCount = 3;
-	constexpr float kClickFxDurationSec = 0.24f;
 	// タイトルの縦メニュー配置を画面サイズと項目数から計算する。
 	struct TitleMenuLayout
 	{
@@ -104,13 +102,9 @@ TitleScene::TitleScene(SceneManager* sceneManager)
 	, m_transitionTimer(0.0f)
 	, m_hintTimer(0.0f)
 	, m_idleTimer(0.0f)
-	, m_demoShotIndex(0)
-	, m_demoShotTimer(0.0f)
 	, m_selectedMenu(0)
 	, m_nextScene(SELECT_SCENE)
 	, m_inTransition(false)
-	, m_clickFxTimer(0.0f)
-	, m_clickFxPos(Vector2::Zero)
 {
 	m_SceneFlag = false;
 }
@@ -128,13 +122,9 @@ void TitleScene::Initialize()
 	m_transitionTimer = 0.0f;
 	m_hintTimer = 0.0f;
 	m_idleTimer = 0.0f;
-	m_demoShotIndex = 0;
-	m_demoShotTimer = 0.0f;
 	m_selectedMenu = 0;
 	m_nextScene = SELECT_SCENE;
 	m_inTransition = false;
-	m_clickFxTimer = 0.0f;
-	m_clickFxPos = Vector2::Zero;
 
 	m_floorMesh = DirectX::GeometricPrimitive::CreateCube(m_directX.GetContext().Get());
 	m_skyMesh = DirectX::GeometricPrimitive::CreateSphere(m_directX.GetContext().Get(), 1.0f, 20);
@@ -168,16 +158,7 @@ void TitleScene::Update(const DX::StepTimer& stepTimer)
 	}
 
 	m_sceneTime += dt;
-	m_demoShotTimer += dt;
-	constexpr float kDemoShotSec = 3.2f;
-	if (m_demoShotTimer >= kDemoShotSec)
-	{
-		m_demoShotTimer = std::fmod(m_demoShotTimer, kDemoShotSec);
-		m_demoShotIndex = (m_demoShotIndex + 1) % 4;
-	}
 	m_hintTimer = std::max(0.0f, m_hintTimer - dt);
-	// クリック演出は時間減衰で自然に消す。
-	m_clickFxTimer = std::max(0.0f, m_clickFxTimer - dt);
 
 	if (m_textRenderer != nullptr)
 	{
@@ -269,10 +250,7 @@ void TitleScene::Update(const DX::StepTimer& stepTimer)
 			m_selectedMenu = i;
 			if (mouseClick)
 			{
-				// クリック位置を保存し、UI側で即時フィードバックを出す。
 				m_hintTimer = 0.18f;
-				m_clickFxTimer = kClickFxDurationSec;
-				m_clickFxPos = mousePoint;
 				if (!ExecuteSelectedMenu())
 				{
 					return;
@@ -334,55 +312,14 @@ void TitleScene::Finalize()
 	m_selectedMenu = 0;
 	m_nextScene = SELECT_SCENE;
 	m_inTransition = false;
-	m_clickFxTimer = 0.0f;
-	m_clickFxPos = Vector2::Zero;
 }
 
 // 軌道カメラを更新する。
 void TitleScene::UpdateCamera()
 {
-	// 「玉の周りを回ってるだけ」に見えないよう、数秒ごとに固定ショットを切り替えて
-	// 剣アクションのシルエットと斬撃の交差が分かる構図を見せる。
-	constexpr float kDemoShotSec = 3.2f;
-	const float t = std::max(0.0f, std::min(1.0f, m_demoShotTimer / kDemoShotSec));
-	const float ease = t * t * (3.0f - 2.0f * t);
-	const float baseYaw = m_sceneTime * kTitleOrbitSpeed;
-
-	Vector3 cameraPos;
-	Vector3 target;
-	float fov = 57.0f;
-	const Vector3 focus(0.0f, 1.35f, 0.0f);
-	const Vector3 heroFocus(-1.0f, 1.25f, 0.0f);
-	const Vector3 clashFocus(0.0f, 1.35f, 0.0f);
-
-	switch (m_demoShotIndex)
-	{
-	case 0: // ワイド: 全体を見せる
-		cameraPos = Vector3(std::sinf(baseYaw) * 18.0f, 6.5f, std::cosf(baseYaw) * 18.0f);
-		target = focus;
-		fov = 58.0f;
-		break;
-	case 1: // 近距離: 主人公寄り
-		cameraPos = Vector3(-6.4f, 2.45f, 6.8f);
-		target = heroFocus;
-		fov = 52.0f;
-		break;
-	case 2: // オーバーショルダー: 対峙が分かる
-		cameraPos = Vector3(-3.4f, 2.05f, 3.1f);
-		target = Vector3(1.0f, 1.2f, 0.0f);
-		fov = 54.0f;
-		break;
-	default: // クラッシュ: 斬撃交差を見せる
-		cameraPos = Vector3(0.2f, 1.85f, 2.6f);
-		target = clashFocus;
-		fov = 49.0f;
-		break;
-	}
-
-	// ショット終端で少しだけ揺らして「生きてる」感じを足す。
-	cameraPos.y += (1.0f - ease) * (std::sinf(m_sceneTime * 2.1f) * 0.12f);
-
-	m_proj = BuildPerspective(fov, 0.1f, 500.0f);
+	const Vector3 cameraPos(-5.8f, 2.7f, 7.4f);
+	const Vector3 target(-0.1f, 1.28f, 0.0f);
+	m_proj = BuildPerspective(51.0f, 0.1f, 500.0f);
 	m_view = Matrix::CreateLookAt(cameraPos, target, Vector3::Up);
 }
 
@@ -396,12 +333,12 @@ void TitleScene::DrawWorld()
 
 	const Matrix skyWorld =
 		Matrix::CreateScale(180.0f) *
-		Matrix::CreateRotationY(m_sceneTime * 0.05f);
+		Matrix::CreateRotationY(0.12f);
 	m_skyMesh->Draw(skyWorld, m_view, m_proj, Color(0.04f, 0.09f, 0.15f, 1.0f));
 
 	const Matrix skyHazeWorld =
 		Matrix::CreateScale(156.0f, 92.0f, 156.0f) *
-		Matrix::CreateRotationY(-m_sceneTime * 0.03f) *
+		Matrix::CreateRotationY(-0.08f) *
 		Matrix::CreateTranslation(0.0f, -24.0f, 0.0f);
 	m_skyMesh->Draw(skyHazeWorld, m_view, m_proj, Color(0.08f, 0.18f, 0.24f, 0.78f));
 
@@ -417,29 +354,29 @@ void TitleScene::DrawWorld()
 
 	const Matrix ringA =
 		Matrix::CreateScale(18.0f, 0.05f, 18.0f) *
-		Matrix::CreateRotationY(m_sceneTime * 0.23f) *
+		Matrix::CreateRotationY(0.18f) *
 		Matrix::CreateTranslation(0.0f, 0.05f, 0.0f);
 	m_floorMesh->Draw(ringA, m_view, m_proj, Color(0.12f, 0.2f, 0.27f, 0.95f));
 
 	const Matrix ringB =
 		Matrix::CreateScale(12.0f, 0.03f, 12.0f) *
-		Matrix::CreateRotationY(-m_sceneTime * 0.31f) *
+		Matrix::CreateRotationY(-0.24f) *
 		Matrix::CreateTranslation(0.0f, 0.08f, 0.0f);
 	m_floorMesh->Draw(ringB, m_view, m_proj, Color(0.14f, 0.34f, 0.46f, 0.54f));
 
 	for (int cloud = 0; cloud < 6; ++cloud)
 	{
 		const float fc = static_cast<float>(cloud);
-		const float drift = std::fmod(m_sceneTime * (1.1f + fc * 0.12f) + fc * 8.5f, 64.0f) - 32.0f;
+		const float drift = -24.0f + fc * 7.4f;
 		const float baseZ = -16.0f + std::fmod(fc * 7.0f, 18.0f);
-		const float baseY = 7.0f + std::sinf(m_sceneTime * 0.38f + fc) * 0.6f;
+		const float baseY = 7.0f + std::sinf(fc) * 0.4f;
 		for (int puff = 0; puff < 3; ++puff)
 		{
 			const float fp = static_cast<float>(puff);
 			const float offset = fc * 0.64f + fp * 0.78f;
 			const Matrix cloudWorld =
 				Matrix::CreateScale(2.8f - fp * 0.5f, 0.32f + fp * 0.03f, 1.8f - fp * 0.22f) *
-				Matrix::CreateRotationY(std::sinf(m_sceneTime * 0.26f + offset) * 0.14f) *
+				Matrix::CreateRotationY(std::sinf(offset) * 0.08f) *
 				Matrix::CreateTranslation(
 					-20.0f + drift + std::cosf(offset) * (1.2f + fp * 0.45f),
 					baseY + fp * 0.18f,
@@ -451,7 +388,7 @@ void TitleScene::DrawWorld()
 	for (size_t i = 0; i < m_pillarPositions.size(); ++i)
 	{
 		const float phase = static_cast<float>(i) * 0.5f;
-		const float height = 2.9f + std::sinf(m_sceneTime * 1.05f + phase) * 1.45f;
+		const float height = 3.2f + std::sinf(phase) * 0.8f;
 		const Vector3 pos = m_pillarPositions[i];
 		const Matrix pillarWorld =
 			Matrix::CreateScale(0.64f, height, 0.64f) *
@@ -460,7 +397,7 @@ void TitleScene::DrawWorld()
 	}
 
 	// 剣アクションと分かるよう、対峙する2体のシルエットを中央に配置する。
-	const float strike = std::sinf(m_sceneTime * 2.4f) * 0.5f + 0.5f;
+	const float strike = 0.68f;
 	const Matrix heroRoot = Matrix::CreateRotationY(0.6f) * Matrix::CreateTranslation(-1.35f, 0.0f, 0.0f);
 	const Matrix foeRoot = Matrix::CreateRotationY(3.14159f + 0.45f) * Matrix::CreateTranslation(1.35f, 0.0f, 0.0f);
 
@@ -494,14 +431,14 @@ void TitleScene::DrawWorld()
 	m_bladeMesh->Draw(foeSword, m_view, m_proj, Color(0.96f, 0.86f, 0.72f, 1.0f));
 
 	// 球体の衝突点は廃止し、斬撃プレートを交差させる。
-	const float clash = std::sinf(m_sceneTime * 6.2f) * 0.5f + 0.5f;
+	const float clash = 0.62f;
 	const Matrix slashA =
 		Matrix::CreateScale(1.0f + clash * 0.35f, 0.08f, 0.16f) *
-		Matrix::CreateRotationY(m_sceneTime * 1.7f + 0.4f) *
+		Matrix::CreateRotationY(0.82f) *
 		Matrix::CreateTranslation(0.02f, 1.36f, -0.02f);
 	const Matrix slashB =
 		Matrix::CreateScale(0.94f + clash * 0.32f, 0.08f, 0.16f) *
-		Matrix::CreateRotationY(m_sceneTime * 1.7f + DirectX::XM_PIDIV2) *
+		Matrix::CreateRotationY(DirectX::XM_PIDIV2 + 0.82f) *
 		Matrix::CreateTranslation(-0.04f, 1.34f, 0.03f);
 	m_bladeMesh->Draw(slashA, m_view, m_proj, Color(1.0f, 0.87f, 0.45f, 0.9f));
 	m_bladeMesh->Draw(slashB, m_view, m_proj, Color(1.0f, 0.73f, 0.34f, 0.84f));
@@ -531,13 +468,13 @@ void TitleScene::DrawUI()
 	System::UIShaderStyle titleStyle;
 	titleStyle.baseColor = Color(0.92f, 0.97f, 1.0f, 1.0f);
 	titleStyle.outlineColor = Color(0.02f, 0.04f, 0.07f, 1.0f);
-	titleStyle.pulseAmount = 0.14f;
-	titleStyle.pulseSpeed = 2.1f;
+	titleStyle.pulseAmount = 0.0f;
+	titleStyle.pulseSpeed = 0.0f;
 
 	System::UIShaderStyle selectedStyle;
 	selectedStyle.baseColor = Color(0.72f, 0.92f, 1.0f, 1.0f);
 	selectedStyle.outlineColor = Color(0.02f, 0.08f, 0.14f, 1.0f);
-	selectedStyle.pulseAmount = 0.2f;
+	selectedStyle.pulseAmount = 0.0f;
 
 	System::UIShaderStyle normalStyle;
 	normalStyle.baseColor = Color(0.84f, 0.89f, 0.95f, 1.0f);
@@ -546,8 +483,8 @@ void TitleScene::DrawUI()
 	System::UIShaderStyle helpStyle;
 	helpStyle.baseColor = Color(1.0f, 0.9f, 0.28f, 1.0f);
 	helpStyle.outlineColor = Color(0.12f, 0.09f, 0.0f, 1.0f);
-	helpStyle.blink = true;
-	helpStyle.blinkPeriod = 0.9f;
+	helpStyle.blink = false;
+	helpStyle.blinkPeriod = 0.0f;
 
 	System::UIShaderStyle demoStyle = helpStyle;
 	demoStyle.baseColor = Color(0.72f, 0.92f, 1.0f, 1.0f);
@@ -561,27 +498,21 @@ void TitleScene::DrawUI()
 		const float t = static_cast<float>(i) / static_cast<float>(bandCount - 1);
 		const float y = height * t;
 		const float h = (height / static_cast<float>(bandCount)) + 2.0f;
-		const float wave = std::sinf(m_sceneTime * 0.75f + t * 5.9f) * 0.035f;
 		DrawSolidRect(
 			batch,
 			Vector2(0.0f, y),
 			Vector2(width, h),
 			Color(
-				0.015f + t * 0.08f + wave,
-				0.03f + t * 0.11f + wave * 0.8f,
-				0.07f + t * 0.16f + wave * 0.55f,
+				0.015f + t * 0.08f,
+				0.03f + t * 0.11f,
+				0.07f + t * 0.16f,
 				0.92f));
 	}
 
-	// 斜めの光条でタイトル画面に動きを追加する。
+	// 斜めの光条は固定配置にし、脈動ではなく構図で見せる。
 	for (int i = 0; i < 3; ++i)
 	{
-		const float speed = 24.0f + static_cast<float>(i) * 6.0f;
-		float x = std::fmod(m_sceneTime * speed + 280.0f * static_cast<float>(i), width + 420.0f) - 210.0f;
-		if (x < -220.0f)
-		{
-			x += width + 420.0f;
-		}
+		const float x = width * (0.14f + static_cast<float>(i) * 0.23f);
 
 		const DirectX::XMFLOAT2 beamScale(220.0f, height * 1.4f);
 		const Color beamColor = (i == 1) ? Color(0.2f, 0.55f, 0.95f, 0.14f) : Color(0.1f, 0.35f, 0.75f, 0.1f);
@@ -592,7 +523,7 @@ void TitleScene::DrawUI()
 	for (int i = 0; i < 52; ++i)
 	{
 		const float fi = static_cast<float>(i);
-		float sx = std::fmod(71.0f * fi + std::sinf(fi * 13.37f) * 170.0f + m_sceneTime * (4.0f + std::fmod(fi, 5.0f)), width);
+		float sx = std::fmod(71.0f * fi + std::sinf(fi * 13.37f) * 170.0f, width);
 		if (sx < 0.0f)
 		{
 			sx += width;
@@ -636,14 +567,12 @@ void TitleScene::DrawUI()
 		MenuEntry{ L"03 終了", L"アプリケーションを終了" }
 	};
 
-	const float selectPulse = std::sinf(m_sceneTime * 5.1f) * 0.5f + 0.5f;
-
 	for (int i = 0; i < kMenuCount; ++i)
 	{
 		const bool selected = (i == m_selectedMenu);
 		const float y = layout.listStartY + static_cast<float>(i) * (layout.cardHeight + layout.cardGap);
 		const Vector2 cardPos(layout.center.x - layout.cardWidth * 0.5f, y);
-		const float edgeAlpha = selected ? (0.78f + selectPulse * 0.20f) : 0.74f;
+		const float edgeAlpha = selected ? 0.92f : 0.74f;
 		const Color cardColor = selected ? Color(0.08f, 0.13f, 0.18f, 0.92f) : Color(0.04f, 0.07f, 0.10f, 0.82f);
 		const Color edgeColor = selected ? Color(0.56f, 0.84f, 1.0f, edgeAlpha) : Color(0.48f, 0.62f, 0.78f, edgeAlpha);
 
@@ -665,34 +594,6 @@ void TitleScene::DrawUI()
 		ui->Draw(batch, menu[static_cast<size_t>(i)].detail, cardPos + Vector2(16.0f * layout.uiScale, 32.0f * layout.uiScale), selected ? selectedStyle : normalStyle, detailScale);
 	}
 
-	if (m_clickFxTimer > 0.0f)
-	{
-		const float progress = 1.0f - (m_clickFxTimer / kClickFxDurationSec);
-		const float radius = 10.0f + progress * 52.0f;
-		const float alpha = (1.0f - progress) * 0.88f;
-		const Color fxColor(0.62f, 0.9f, 1.0f, alpha);
-		for (int particle = 0; particle < 14; ++particle)
-		{
-			const float fp = static_cast<float>(particle);
-			const float angle = (DirectX::XM_2PI / 14.0f) * fp + progress * 1.6f;
-			const Vector2 dir(std::cosf(angle), std::sinf(angle));
-			const Vector2 point = m_clickFxPos + dir * radius;
-			const float size = 2.0f + std::fmod(fp, 3.0f);
-			DrawSolidRect(batch, point - Vector2(size * 0.5f, size * 0.5f), Vector2(size, size), fxColor);
-		}
-
-		const float coreRadius = 4.0f + (1.0f - progress) * 12.0f;
-		DrawSolidRect(
-			batch,
-			m_clickFxPos + Vector2(-coreRadius, -1.0f),
-			Vector2(coreRadius * 2.0f, 2.0f),
-			Color(0.95f, 1.0f, 0.95f, alpha * 0.9f));
-		DrawSolidRect(
-			batch,
-			m_clickFxPos + Vector2(-1.0f, -coreRadius),
-			Vector2(2.0f, coreRadius * 2.0f),
-			Color(0.95f, 1.0f, 0.95f, alpha * 0.9f));
-	}
 	EndSpriteLayer();
 }
 

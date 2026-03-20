@@ -64,6 +64,8 @@ void GameScene::DrawWorldActors()
 	const float armPulse = runCycle * 0.18f;
 	const SceneFx::PlayerVisualProfile playerVisual = SceneFx::BuildPlayerVisualProfile(m_player, m_sceneTime);
 	const Color playerColor = playerVisual.armorLight;
+	const Vector3 forward(std::sin(m_player.yaw), 0.0f, std::cos(m_player.yaw));
+	const Vector3 right(forward.z, 0.0f, -forward.x);
 	DrawContactShadow(m_player.position, 0.56f, 0.78f, 0.18f);
 
 	const Matrix playerRoot =
@@ -136,23 +138,10 @@ void GameScene::DrawWorldActors()
 	m_obstacleMesh->Draw(playerHipLeftWorld, m_view, m_proj, playerVisual.armorDark);
 	m_obstacleMesh->Draw(playerHipRightWorld, m_view, m_proj, playerVisual.armorDark);
 
-	const Matrix playerArmLeftWorld =
-		Matrix::CreateScale(0.14f, 0.48f, 0.14f) *
-		Matrix::CreateRotationZ(LerpFloat(-0.08f + armPulse * 0.35f, -0.2f + armPulse, carryBlend)) *
-		Matrix::CreateTranslation(LerpVector(Vector3(-0.32f, 1.04f, -0.04f), Vector3(-0.4f, 1.06f, 0.0f), carryBlend)) *
-		playerRoot;
 	const Vector3 playerRightArmOffset = LerpVector(
-		Vector3(0.24f, 1.0f, -0.10f),
-		Vector3(0.34f, 1.02f, 0.06f + attackBlend * 0.10f),
+		Vector3(0.30f, 0.94f, -0.18f),
+		Vector3(0.30f, 1.00f, 0.04f + attackBlend * 0.08f),
 		carryBlend);
-	const Matrix playerArmRightWorld =
-		Matrix::CreateScale(0.14f, 0.50f, 0.14f) *
-		Matrix::CreateRotationX(LerpFloat(0.58f, -0.24f - attackBlend * 0.82f, carryBlend)) *
-		Matrix::CreateRotationZ(LerpFloat(0.08f + armPulse * 0.25f, 0.28f - armPulse + comboSign * attackBlend * 0.42f, carryBlend)) *
-		Matrix::CreateTranslation(playerRightArmOffset) *
-		playerRoot;
-	m_playerMesh->Draw(playerArmLeftWorld, m_view, m_proj, playerVisual.underColor);
-	m_playerMesh->Draw(playerArmRightWorld, m_view, m_proj, playerVisual.underColor);
 
 	const Matrix playerLegLeftWorld =
 		Matrix::CreateScale(0.14f, 0.55f, 0.16f) *
@@ -177,13 +166,11 @@ void GameScene::DrawWorldActors()
 	m_obstacleMesh->Draw(playerShinLeftWorld, m_view, m_proj, playerVisual.armorDark);
 	m_obstacleMesh->Draw(playerShinRightWorld, m_view, m_proj, playerVisual.armorDark);
 
-	const Vector3 forward(std::sin(m_player.yaw), 0.0f, std::cos(m_player.yaw));
-	const Vector3 right(forward.z, 0.0f, -forward.x);
 	const float swingYaw = comboSign * (attackBlend * 2.0f - 1.0f) * kWeaponSwingYawRad;
 	const float swingPitch = -0.52f + std::sinf(attackBlend * DirectX::XM_PI) * (kWeaponSwingPitchRad * 0.86f);
-	const float carryYawOffset = LerpFloat(-0.48f, swingYaw, carryBlend);
-	const float carryPitch = LerpFloat(0.18f, swingPitch, carryBlend);
-	const float carryRoll = LerpFloat(-2.24f, -0.18f + comboSign * attackBlend * 0.10f, carryBlend);
+	const float carryYawOffset = LerpFloat(-0.72f, swingYaw, carryBlend);
+	const float carryPitch = LerpFloat(0.42f, swingPitch, carryBlend);
+	const float carryRoll = LerpFloat(-2.72f, -0.18f + comboSign * attackBlend * 0.10f, carryBlend);
 	const Matrix bladeRotation =
 		Matrix::CreateRotationZ(carryRoll) *
 		Matrix::CreateRotationX(carryPitch) *
@@ -192,15 +179,33 @@ void GameScene::DrawWorldActors()
 	bladeDir.Normalize();
 	const Vector3 gripAnchor = Vector3::Transform(
 		LerpVector(
-			Vector3(0.22f, 0.80f, -0.12f),
-			Vector3(0.36f, 0.78f, 0.16f + attackBlend * 0.03f),
+			Vector3(0.34f, 0.70f, -0.24f),
+			Vector3(0.30f, 0.78f, 0.10f + attackBlend * 0.02f),
 			carryBlend),
 		playerRoot);
 	const Vector3 weaponCenter =
 		gripAnchor +
-		bladeDir * LerpFloat(0.42f, 0.54f + attackBlend * 0.06f, carryBlend) +
-		forward * LerpFloat(-0.14f, 0.04f + attackBlend * 0.10f, carryBlend) +
-		right * LerpFloat(0.14f, 0.02f + comboSign * 0.03f, carryBlend);
+		bladeDir * LerpFloat(0.36f, 0.50f + attackBlend * 0.05f, carryBlend) +
+		forward * LerpFloat(-0.28f, -0.02f + attackBlend * 0.08f, carryBlend) +
+		right * LerpFloat(0.20f, 0.05f + comboSign * 0.03f, carryBlend);
+	const Vector3 supportGripLocal = LerpVector(
+		Vector3(-0.30f, 1.02f, -0.02f),
+		Vector3(0.06f, 0.92f, -0.10f),
+		carryBlend);
+	const Matrix playerArmLeftWorld =
+		Matrix::CreateScale(0.14f, 0.48f, 0.14f) *
+		Matrix::CreateRotationX(LerpFloat(0.02f, 0.32f - attackBlend * 0.18f, carryBlend)) *
+		Matrix::CreateRotationZ(LerpFloat(-0.10f + armPulse * 0.25f, -1.02f + comboSign * attackBlend * 0.10f, carryBlend)) *
+		Matrix::CreateTranslation(supportGripLocal) *
+		playerRoot;
+	const Matrix playerArmRightWorld =
+		Matrix::CreateScale(0.14f, 0.50f, 0.14f) *
+		Matrix::CreateRotationX(LerpFloat(0.58f, -0.24f - attackBlend * 0.82f, carryBlend)) *
+		Matrix::CreateRotationZ(LerpFloat(0.08f + armPulse * 0.25f, 0.28f - armPulse + comboSign * attackBlend * 0.42f, carryBlend)) *
+		Matrix::CreateTranslation(playerRightArmOffset) *
+		playerRoot;
+	m_playerMesh->Draw(playerArmLeftWorld, m_view, m_proj, playerVisual.underColor);
+	m_playerMesh->Draw(playerArmRightWorld, m_view, m_proj, playerVisual.underColor);
 	const Matrix weaponWorld =
 		bladeRotation *
 		Matrix::CreateTranslation(weaponCenter);
@@ -325,33 +330,36 @@ void GameScene::DrawWorldActors()
 
 		if (!midVisualLod)
 		{
-			const bool rangedEnemy = (enemy.weaponType == Action::EnemyWeaponType::Ranged);
-			const float enemyReadyBlend = (enemy.state == Action::EnemyStateType::Aim)
-				? 0.68f
-				: enemyAttackBlend;
-			const float enemyArmPulse = std::sinf(m_sceneTime * 5.2f + static_cast<float>(i)) * 0.2f;
+			const bool movingEnemy =
+				enemy.state == Action::EnemyStateType::Wander ||
+				enemy.state == Action::EnemyStateType::Chase ||
+				enemy.state == Action::EnemyStateType::Return;
+			const float locomotionBlend = movingEnemy ? 1.0f : 0.0f;
+			const float enemyReadyBlend = enemyAttackBlend;
+			const float enemyArmPulse = std::sinf(m_sceneTime * (4.6f + locomotionBlend * 2.2f) + static_cast<float>(i)) * (0.12f + locomotionBlend * 0.22f);
+			const float enemyLegSwing = std::sinf(m_sceneTime * (3.0f + locomotionBlend * 4.2f) + static_cast<float>(i) * 0.9f) * (0.08f + locomotionBlend * 0.24f);
+			const float flankBias = (enemy.archetype == Action::EnemyArchetype::BladeFlank) ? 0.16f : 0.0f;
 			const Matrix enemyArmLeftWorld =
 				Matrix::CreateScale(0.14f, 0.48f, 0.14f) *
-				Matrix::CreateRotationX(LerpFloat(0.08f, rangedEnemy ? -0.18f : 0.0f, enemyReadyBlend)) *
-				Matrix::CreateRotationZ(LerpFloat(-0.02f + enemyArmPulse * 0.25f, (rangedEnemy ? -0.08f : -0.2f) + enemyArmPulse * (rangedEnemy ? 0.45f : 1.0f), enemyReadyBlend)) *
+				Matrix::CreateRotationX(LerpFloat(0.08f + locomotionBlend * 0.08f, 0.10f + flankBias, enemyReadyBlend)) *
+				Matrix::CreateRotationZ(LerpFloat(-0.04f + enemyArmPulse * 0.65f, -0.34f - flankBias + enemyArmPulse * 1.1f, enemyReadyBlend)) *
 				Matrix::CreateTranslation(LerpVector(
 					Vector3(-0.30f, 1.02f, -0.06f),
-					Vector3(rangedEnemy ? -0.34f : -0.4f, 1.06f, rangedEnemy ? 0.14f : 0.0f),
+					Vector3(-0.4f, 1.06f, 0.0f),
 					enemyReadyBlend)) *
 				enemyRoot;
 			const Matrix enemyArmRightWorld =
 				Matrix::CreateScale(0.14f, 0.48f, 0.14f) *
-				Matrix::CreateRotationX(LerpFloat(rangedEnemy ? 0.62f : 0.54f, rangedEnemy ? (-0.42f - enemyAttackBlend * 0.25f) : (-enemyAttackBlend * 0.9f), enemyReadyBlend)) *
-				Matrix::CreateRotationZ(LerpFloat(0.04f, rangedEnemy ? 0.08f : (0.2f - enemyArmPulse), enemyReadyBlend)) *
+				Matrix::CreateRotationX(LerpFloat(0.54f - locomotionBlend * 0.06f, -0.18f - enemyAttackBlend * 0.9f, enemyReadyBlend)) *
+				Matrix::CreateRotationZ(LerpFloat(0.02f - enemyArmPulse * 0.55f, 0.30f - enemyArmPulse * 1.05f, enemyReadyBlend)) *
 				Matrix::CreateTranslation(LerpVector(
 					Vector3(0.24f, 1.0f, -0.10f),
-					Vector3(rangedEnemy ? 0.34f : 0.4f, 1.06f, rangedEnemy ? (0.18f + enemyAttackBlend * 0.14f) : (enemyAttackBlend * 0.2f)),
+					Vector3(0.4f, 1.06f, enemyAttackBlend * 0.2f),
 					enemyReadyBlend)) *
 				enemyRoot;
 			m_playerMesh->Draw(enemyArmLeftWorld, m_view, m_proj, enemyVisual.underColor);
 			m_playerMesh->Draw(enemyArmRightWorld, m_view, m_proj, enemyVisual.underColor);
 
-			const float enemyLegSwing = std::sinf(m_sceneTime * 5.8f + static_cast<float>(i) * 0.9f) * 0.26f;
 			const Matrix enemyLegLeftWorld =
 				Matrix::CreateScale(0.14f, 0.55f, 0.16f) *
 				Matrix::CreateRotationX(enemyLegSwing) *
@@ -364,89 +372,36 @@ void GameScene::DrawWorldActors()
 				enemyRoot;
 			m_playerMesh->Draw(enemyLegLeftWorld, m_view, m_proj, enemyVisual.underColor);
 			m_playerMesh->Draw(enemyLegRightWorld, m_view, m_proj, enemyVisual.underColor);
-			if (rangedEnemy)
+			const float bladePitch = LerpFloat(0.84f, -0.4f - enemyAttackBlend * 0.8f, enemyReadyBlend);
+			const float bladeYaw = LerpFloat(-0.44f, 0.0f, enemyReadyBlend);
+			const Vector3 bladeOffset = LerpVector(
+				Vector3(0.22f, 0.82f, -0.10f),
+				Vector3(0.58f, 0.96f, 0.18f + enemyAttackBlend * 0.18f),
+				enemyReadyBlend);
+			const Matrix enemyBladeWorld =
+				Matrix::CreateScale(0.08f, 0.08f, 0.56f) *
+				Matrix::CreateRotationY(bladeYaw) *
+				Matrix::CreateRotationX(bladePitch) *
+				Matrix::CreateTranslation(bladeOffset) *
+				enemyRoot;
+			const Matrix enemyBladeHandleWorld =
+				Matrix::CreateScale(0.09f, 0.11f, 0.16f) *
+				Matrix::CreateTranslation(LerpVector(
+					Vector3(0.18f, 0.84f, -0.18f),
+					Vector3(0.52f, 0.98f, 0.0f),
+					enemyReadyBlend)) *
+				enemyRoot;
+			m_obstacleMesh->Draw(enemyBladeWorld, m_view, m_proj, enemyVisual.weaponColor);
+			m_obstacleMesh->Draw(enemyBladeHandleWorld, m_view, m_proj, enemyVisual.trimColor);
+			if (enemyReadyBlend > 0.05f)
 			{
-				const float gunPitch = LerpFloat(0.82f, -0.18f - enemyAttackBlend * 0.12f, enemyReadyBlend);
-				const float gunYaw = LerpFloat(-0.52f, 0.0f, enemyReadyBlend);
-				const Vector3 gunBodyOffset = LerpVector(
-					Vector3(0.24f, 0.84f, -0.10f),
-					Vector3(0.52f, 1.0f, 0.24f + enemyAttackBlend * 0.08f),
-					enemyReadyBlend);
-				const Vector3 gunBarrelOffset = LerpVector(
-					Vector3(0.30f, 0.88f, 0.08f),
-					Vector3(0.58f, 1.02f, 0.52f + enemyAttackBlend * 0.16f),
-					enemyReadyBlend);
-				const Matrix enemyGunBodyWorld =
-					Matrix::CreateScale(0.18f, 0.11f, 0.42f) *
-					Matrix::CreateRotationY(gunYaw) *
-					Matrix::CreateRotationX(gunPitch) *
-					Matrix::CreateTranslation(gunBodyOffset) *
-					enemyRoot;
-				const Matrix enemyGunBarrelWorld =
-					Matrix::CreateScale(0.05f, 0.05f, 0.34f) *
-					Matrix::CreateRotationY(gunYaw) *
-					Matrix::CreateRotationX(gunPitch) *
-					Matrix::CreateTranslation(gunBarrelOffset) *
-					enemyRoot;
-				const Matrix enemyGunCoreWorld =
-					Matrix::CreateScale(0.06f, 0.04f, 0.08f) *
-					Matrix::CreateTranslation(LerpVector(
-						Vector3(0.22f, 0.88f, -0.12f),
-						Vector3(0.48f, 1.02f, 0.18f),
-						enemyReadyBlend)) *
-					enemyRoot;
-				m_obstacleMesh->Draw(enemyGunBodyWorld, m_view, m_proj, enemyVisual.weaponColor);
-				m_obstacleMesh->Draw(enemyGunBarrelWorld, m_view, m_proj, enemyVisual.weaponColor);
-				m_obstacleMesh->Draw(enemyGunCoreWorld, m_view, m_proj, enemyVisual.emissiveColor);
-				if (enemyReadyBlend > 0.05f)
-				{
-					const Vector3 muzzlePos = Vector3::Transform(gunBarrelOffset + Vector3(0.0f, 0.0f, 0.26f), enemyRoot);
-					const float chargeAlpha = 0.14f + enemyReadyBlend * 0.42f;
-					const Matrix muzzleGlowWorld =
-						Matrix::CreateScale(0.12f + enemyReadyBlend * 0.07f, 0.12f + enemyReadyBlend * 0.07f, 0.12f + enemyReadyBlend * 0.07f) *
-						Matrix::CreateTranslation(muzzlePos);
-					const Matrix muzzleTrailWorld =
-						Matrix::CreateScale(0.06f, 0.025f, 0.48f + enemyReadyBlend * 0.26f) *
-						Matrix::CreateRotationY(enemy.yaw) *
-						Matrix::CreateRotationX(-0.16f) *
-						Matrix::CreateTranslation(muzzlePos + enemyForward * (0.20f + enemyReadyBlend * 0.18f));
-					m_effectOrbMesh->Draw(muzzleGlowWorld, m_view, m_proj, Color(enemyVisual.emissiveColor.x, enemyVisual.emissiveColor.y, enemyVisual.emissiveColor.z, chargeAlpha));
-					m_effectTrailMesh->Draw(muzzleTrailWorld, m_view, m_proj, Color(enemyVisual.emissiveColor.x, enemyVisual.emissiveColor.y, enemyVisual.emissiveColor.z, chargeAlpha * 0.78f));
-				}
-			}
-			else
-			{
-				const float bladePitch = LerpFloat(0.84f, -0.4f - enemyAttackBlend * 0.8f, enemyReadyBlend);
-				const float bladeYaw = LerpFloat(-0.44f, 0.0f, enemyReadyBlend);
-				const Vector3 bladeOffset = LerpVector(
-					Vector3(0.22f, 0.82f, -0.10f),
-					Vector3(0.58f, 0.96f, 0.18f + enemyAttackBlend * 0.18f),
-					enemyReadyBlend);
-				const Matrix enemyBladeWorld =
-					Matrix::CreateScale(0.08f, 0.08f, 0.56f) *
-					Matrix::CreateRotationY(bladeYaw) *
-					Matrix::CreateRotationX(bladePitch) *
-					Matrix::CreateTranslation(bladeOffset) *
-					enemyRoot;
-				const Matrix enemyBladeHandleWorld =
-					Matrix::CreateScale(0.09f, 0.11f, 0.16f) *
-					Matrix::CreateTranslation(LerpVector(
-						Vector3(0.18f, 0.84f, -0.18f),
-						Vector3(0.52f, 0.98f, 0.0f),
-						enemyReadyBlend)) *
-					enemyRoot;
-				m_obstacleMesh->Draw(enemyBladeWorld, m_view, m_proj, enemyVisual.weaponColor);
-				m_obstacleMesh->Draw(enemyBladeHandleWorld, m_view, m_proj, enemyVisual.trimColor);
-				if (enemyReadyBlend > 0.05f)
-				{
-					const Matrix meleeCueWorld =
-						Matrix::CreateScale(0.22f + enemyReadyBlend * 0.08f, 0.03f, 1.12f + enemyReadyBlend * 0.34f) *
-						Matrix::CreateRotationZ(0.52f) *
-						Matrix::CreateRotationX(-0.22f) *
-						Matrix::CreateRotationY(enemy.yaw + 0.04f) *
-						Matrix::CreateTranslation(enemy.position + enemyForward * (0.82f + enemyReadyBlend * 0.18f) + Vector3(0.0f, 1.02f, 0.0f));
-					m_effectTrailMesh->Draw(meleeCueWorld, m_view, m_proj, Color(1.0f, 0.30f, 0.18f, 0.16f + enemyReadyBlend * 0.30f));
-				}
+				const Matrix meleeCueWorld =
+					Matrix::CreateScale(0.22f + enemyReadyBlend * 0.08f, 0.03f, 1.12f + enemyReadyBlend * 0.34f) *
+					Matrix::CreateRotationZ(0.52f) *
+					Matrix::CreateRotationX(-0.22f) *
+					Matrix::CreateRotationY(enemy.yaw + 0.04f) *
+					Matrix::CreateTranslation(enemy.position + enemyForward * (0.82f + enemyReadyBlend * 0.18f) + Vector3(0.0f, 1.02f, 0.0f));
+				m_effectTrailMesh->Draw(meleeCueWorld, m_view, m_proj, Color(1.0f, 0.30f, 0.18f, 0.16f + enemyReadyBlend * 0.30f));
 			}
 		}
 
@@ -488,33 +443,6 @@ void GameScene::DrawWorldActors()
 				m_debugCellMesh->Draw(cellWorld, m_view, m_proj, DirectX::Colors::Orange);
 			}
 		}
-	}
-
-	for (size_t projectileIndex = 0; projectileIndex < m_enemyProjectiles.size(); ++projectileIndex)
-	{
-		const EnemyProjectileInfo& projectile = m_enemyProjectiles[projectileIndex];
-		Vector3 velocityDir = projectile.velocity;
-		if (velocityDir.LengthSquared() <= 0.0001f)
-		{
-			velocityDir = Vector3::UnitZ;
-		}
-		else
-		{
-			velocityDir.Normalize();
-		}
-		const float projectileYaw = std::atan2(velocityDir.x, velocityDir.z);
-		const float projectilePitch = -std::asinf(Utility::MathEx::Clamp(velocityDir.y, -1.0f, 1.0f));
-		const float pulse = std::sinf(m_sceneTime * 18.0f + static_cast<float>(projectileIndex) * 0.7f) * 0.5f + 0.5f;
-		const Matrix projectileWorld =
-			Matrix::CreateScale(projectile.radius * (0.95f + pulse * 0.18f)) *
-			Matrix::CreateTranslation(projectile.position);
-		const Matrix projectileTrailWorld =
-			Matrix::CreateScale(projectile.radius * 0.55f, 0.022f, 0.82f) *
-			Matrix::CreateRotationY(projectileYaw) *
-			Matrix::CreateRotationX(projectilePitch) *
-			Matrix::CreateTranslation(projectile.position - velocityDir * 0.36f);
-		m_effectOrbMesh->Draw(projectileWorld, m_view, m_proj, Color(projectile.color.x, projectile.color.y, projectile.color.z, 0.88f));
-		m_effectTrailMesh->Draw(projectileTrailWorld, m_view, m_proj, Color(projectile.color.x, projectile.color.y, projectile.color.z, 0.44f));
 	}
 
 	if (m_effectTrailMesh && m_effectOrbMesh)

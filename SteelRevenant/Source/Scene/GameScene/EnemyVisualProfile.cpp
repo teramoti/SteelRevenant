@@ -29,12 +29,20 @@ namespace
 		case Action::EnemyArchetype::BladeRush:
 			return Color(0.96f, 0.38f, 0.24f, 1.0f);
 		case Action::EnemyArchetype::BladeFlank:
-			return Color(0.88f, 0.30f, 0.62f, 1.0f);
-		case Action::EnemyArchetype::GunHold:
-			return Color(0.34f, 0.78f, 1.0f, 1.0f);
-		case Action::EnemyArchetype::GunPressure:
 		default:
 			return Color(1.0f, 0.82f, 0.26f, 1.0f);
+		}
+	}
+
+	Color GetArchetypeArmorTint(Action::EnemyArchetype archetype)
+	{
+		switch (archetype)
+		{
+		case Action::EnemyArchetype::BladeRush:
+			return Color(0.64f, 0.22f, 0.16f, 1.0f);
+		case Action::EnemyArchetype::BladeFlank:
+		default:
+			return Color(0.50f, 0.30f, 0.12f, 1.0f);
 		}
 	}
 }
@@ -51,6 +59,7 @@ namespace SceneFx
 		EnemyVisualProfile profile;
 
 		Color emissive = GetArchetypeEmissive(enemy.archetype);
+		const Color armorTint = GetArchetypeArmorTint(enemy.archetype);
 
 		const float dangerTint = Utility::MathEx::Clamp(0.96f + static_cast<float>(dangerLevel) * 0.035f, 0.96f, 1.14f);
 
@@ -63,19 +72,23 @@ namespace SceneFx
 		const float jitterB = std::sinf(seed * 2.27f + 2.3f) * 0.03f;
 
 		profile.armorDark = Color(
-			Clamp01((0.10f + jitterR) * dangerTint),
-			Clamp01((0.11f + jitterG) * dangerTint),
-			Clamp01((0.14f + jitterB) * dangerTint),
+			Clamp01((armorTint.x * 0.34f + jitterR) * dangerTint),
+			Clamp01((armorTint.y * 0.40f + jitterG) * dangerTint),
+			Clamp01((armorTint.z * 0.46f + jitterB) * dangerTint),
 			1.0f);
 		profile.armorLight = Color(
-			Clamp01((0.18f + jitterR) * dangerTint),
-			Clamp01((0.21f + jitterG) * dangerTint),
-			Clamp01((0.26f + jitterB) * dangerTint),
+			Clamp01((armorTint.x * 0.78f + 0.05f + jitterR) * dangerTint),
+			Clamp01((armorTint.y * 0.78f + 0.06f + jitterG) * dangerTint),
+			Clamp01((armorTint.z * 0.78f + 0.07f + jitterB) * dangerTint),
 			1.0f);
-		profile.underColor = Color(0.08f, 0.09f, 0.11f, 1.0f);
-		profile.trimColor = Color(0.14f, 0.16f, 0.20f, 1.0f);
+		profile.underColor = Color(0.06f, 0.05f, 0.07f, 1.0f);
+		profile.trimColor = Color(
+			Clamp01(armorTint.x * 0.44f),
+			Clamp01(armorTint.y * 0.44f),
+			Clamp01(armorTint.z * 0.44f),
+			1.0f);
 		profile.emissiveColor = emissive;
-		profile.weaponColor = Color(0.28f, 0.30f, 0.34f, 1.0f);
+		profile.weaponColor = Color(0.20f, 0.19f, 0.22f, 1.0f);
 
 		if (enemy.state == Action::EnemyStateType::Attack)
 		{

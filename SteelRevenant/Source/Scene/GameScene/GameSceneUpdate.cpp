@@ -30,21 +30,6 @@ namespace
 	constexpr float kCameraShakeSettleSec = 0.18f;
 	constexpr float kHitStopSecPerHit = 0.028f;
 	constexpr float kHitStopSecMax = 0.065f;
-	constexpr float kEnemyProjectileLifetimeSec = 1.8f;
-
-	// 線分と球の交差判定を返す。
-	bool SegmentHitsSphere(const Vector3& start, const Vector3& end, const Vector3& center, float radius)
-	{
-		const Vector3 segment = end - start;
-		const float segmentLengthSq = segment.LengthSquared();
-		if (segmentLengthSq <= 0.000001f)
-		{
-			return (center - start).LengthSquared() <= radius * radius;
-		}
-		const float t = Utility::MathEx::Clamp((center - start).Dot(segment) / segmentLengthSq, 0.0f, 1.0f);
-		const Vector3 closest = start + segment * t;
-		return (center - closest).LengthSquared() <= radius * radius;
-	}
 }
 
 // 現在入力を戦闘更新用のスナップショットへまとめる。
@@ -209,47 +194,10 @@ void GameScene::UpdateCombatFrame(float dt, const Action::InputSnapshot& input)
 		ResolvePlayerObstacleCollision(previousPlayerPosition);
 		m_player.position.y = ResolveGroundHeight(m_player.position);
 		m_combat.UpdateEnemies(m_enemies, m_player, input, m_grid, m_solver, m_gameState);
-		UpdateEnemyProjectiles(dt);
 		if (m_gameState.IsFinished())
 		{
 			m_gameState.score = ComputeStageScore();
 			return;
-		}
-		for (size_t enemyIndex = 0; enemyIndex < m_enemies.size(); ++enemyIndex)
-		{
-			Action::EnemyState& enemy = m_enemies[enemyIndex];
-			if (!enemy.firedProjectileThisFrame)
-			{
-				continue;
-			}
-
-			Color projectileColor(1.0f, 0.72f, 0.18f, 1.0f);
-			switch (enemy.archetype)
-			{
-			case Action::EnemyArchetype::BladeRush:
-				projectileColor = Color(1.00f, 0.28f, 0.12f, 1.0f);
-				break;
-			case Action::EnemyArchetype::BladeFlank:
-				projectileColor = Color(0.82f, 0.12f, 0.62f, 1.0f);
-				break;
-			case Action::EnemyArchetype::GunHold:
-				projectileColor = Color(0.28f, 0.72f, 1.00f, 1.0f);
-				break;
-			case Action::EnemyArchetype::GunPressure:
-			default:
-				projectileColor = Color(1.00f, 0.78f, 0.18f, 1.0f);
-				break;
-			}
-
-			EnemyProjectileInfo projectile;
-			projectile.position = enemy.projectileSpawnPosition;
-			projectile.velocity = enemy.projectileVelocity;
-			projectile.color = projectileColor;
-			projectile.radius = (enemy.archetype == Action::EnemyArchetype::GunHold) ? 0.32f : 0.38f;
-			projectile.lifetimeSec = kEnemyProjectileLifetimeSec;
-			projectile.damage = enemy.projectileDamage;
-			m_enemyProjectiles.push_back(projectile);
-			enemy.firedProjectileThisFrame = false;
 		}
 		m_combat.ResolvePlayerAttack(m_player, m_enemies, m_gameState);
 		UpdateArenaObjectiveLayer(dt);
@@ -273,14 +221,8 @@ void GameScene::UpdateCombatFrame(float dt, const Action::InputSnapshot& input)
 					hitTint = Color(1.00f, 0.28f, 0.12f, 1.0f);
 					break;
 				case Action::EnemyArchetype::BladeFlank:
-					hitTint = Color(0.82f, 0.12f, 0.62f, 1.0f);
-					break;
-				case Action::EnemyArchetype::GunHold:
-					hitTint = Color(0.28f, 0.72f, 1.00f, 1.0f);
-					break;
-				case Action::EnemyArchetype::GunPressure:
 				default:
-					hitTint = Color(1.00f, 0.78f, 0.18f, 1.0f);
+					hitTint = Color(0.82f, 0.12f, 0.62f, 1.0f);
 					break;
 				}
 				m_slashHitEffects.Spawn(m_enemies[enemyIndex].position, hitYaw, hitTint);
@@ -313,63 +255,6 @@ void GameScene::UpdateCombatFrame(float dt, const Action::InputSnapshot& input)
 	}
 }
 
-// 敵の飛翔弾を更新して命中判定を行う。
-void GameScene::UpdateEnemyProjectiles(float dt)
-{
-	if (m_enemyProjectiles.empty())
-	{
-		return;
-	}
-
-	const Vector3 playerHitCenter = m_player.position + Vector3(0.0f, 0.9f, 0.0f);
-	const float playerHitRadius = 0.55f;
-
-	for (size_t projectileIndex = 0; projectileIndex < m_enemyProjectiles.size();)
-	{
-		EnemyProjectileInfo& projectile = m_enemyProjectiles[projectileIndex];
-		const Vector3 previousPosition = projectile.position;
-		projectile.position += projectile.velocity * dt;
-		projectile.lifetimeSec -= dt;
-
-		bool removeProjectile = (projectile.lifetimeSec <= 0.0f);
-		if (!removeProjectile && IsInsideObstacle(projectile.position, projectile.radius * 0.65f))
-		{
-			removeProjectile = true;
-		}
-
-		if (!removeProjectile &&
-			SegmentHitsSphere(previousPosition, projectile.position, playerHitCenter, projectile.radius + playerHitRadius) &&
-			m_player.damageGraceTimer <= 0.0f)
-		{
-			float damage = projectile.damage;
-			if (m_player.guarding)
-			{
-				damage *= m_combat.GetTuning().enemyRangedGuardDamageScale;
-			}
-			m_gameState.stageTimer = std::max(0.0f, m_gameState.stageTimer - 1.0f);
-			m_gameState.damageTaken += static_cast<int>(std::round(damage));
-			if (m_gameState.stageTimer <= 0.0f)
-			{
-				m_gameState.stageTimer = 0.0f;
-				m_gameState.timeExpired = true;
-			}
-			m_player.damageGraceTimer = m_combat.GetTuning().damageGraceSec;
-			GameAudio::AudioSystem::GetInstance().PlaySe(
-				m_player.guarding ? GameAudio::SeId::GuardBlock : GameAudio::SeId::PlayerHit,
-				m_player.guarding ? 0.70f : 0.82f);
-			removeProjectile = true;
-		}
-
-		if (removeProjectile)
-		{
-			m_enemyProjectiles.erase(m_enemyProjectiles.begin() + static_cast<std::ptrdiff_t>(projectileIndex));
-			continue;
-		}
-
-		++projectileIndex;
-	}
-}
-
 // 入力、戦闘、演出、進行を 1 フレーム更新する。
 void GameScene::Update(const DX::StepTimer& stepTimer)
 {
@@ -391,6 +276,7 @@ void GameScene::Update(const DX::StepTimer& stepTimer)
 	const DirectX::Mouse::ButtonStateTracker mouseTracker = inputManager.GetMouseTracker();
 	const DirectX::Mouse::State mouseState = inputManager.GetMouseState();
 	m_pauseClickFxTimer = std::max(0.0f, m_pauseClickFxTimer - dt);
+	m_stageIntroTimer = std::max(0.0f, m_stageIntroTimer - dt);
 
 	HandlePauseToggle(keyTracker);
 	if (UpdatePausedState(dt, mouseTracker, mouseState))
@@ -412,6 +298,12 @@ void GameScene::Update(const DX::StepTimer& stepTimer)
 	}
 
 	UpdateLockOn(input);
+
+	if (m_stageIntroTimer > 0.0f)
+	{
+		UpdateCamera(dt, input);
+		return;
+	}
 
 	if (m_hitStopTimer > 0.0f && !m_gameState.IsFinished())
 	{

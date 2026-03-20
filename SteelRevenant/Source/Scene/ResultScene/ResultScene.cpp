@@ -183,27 +183,27 @@ void ResultScene::Render()
 	System::UIShaderStyle titleStyle;
 	titleStyle.baseColor = Color(1.0f, 0.42f, 0.38f, 1.0f);
 	titleStyle.outlineColor = Color(0.04f, 0.04f, 0.04f, 1.0f);
-	titleStyle.pulseAmount = 0.2f;
-	titleStyle.pulseSpeed = 3.0f;
+	titleStyle.pulseAmount = 0.0f;
+	titleStyle.pulseSpeed = 0.0f;
 
 	System::UIShaderStyle normalStyle;
 	normalStyle.baseColor = Color(0.92f, 0.95f, 0.98f, 1.0f);
 	normalStyle.outlineColor = Color(0.05f, 0.05f, 0.07f, 1.0f);
-	normalStyle.pulseAmount = 0.08f;
+	normalStyle.pulseAmount = 0.0f;
 
 	System::UIShaderStyle valueStyle = normalStyle;
 	valueStyle.baseColor = Color(1.0f, 0.95f, 0.75f, 1.0f);
 	valueStyle.outlineColor = Color(0.12f, 0.08f, 0.02f, 1.0f);
-	valueStyle.pulseAmount = 0.1f;
+	valueStyle.pulseAmount = 0.0f;
 
 	System::UIShaderStyle selectedStyle;
 	selectedStyle.baseColor = Color(0.72f, 0.92f, 1.0f, 1.0f);
 	selectedStyle.outlineColor = Color(0.02f, 0.08f, 0.14f, 1.0f);
-	selectedStyle.pulseAmount = 0.16f;
+	selectedStyle.pulseAmount = 0.0f;
 
 	System::UIShaderStyle warningStyle = titleStyle;
-	warningStyle.blink = true;
-	warningStyle.blinkPeriod = 0.75f;
+	warningStyle.blink = false;
+	warningStyle.blinkPeriod = 0.0f;
 
 	BeginSpriteLayer();
 
@@ -216,12 +216,11 @@ void ResultScene::Render()
 		const float t = static_cast<float>(band) / 17.0f;
 		const float y = height * t;
 		const float h = (height / 18.0f) + 2.0f;
-		const float wave = std::sinf(m_elapsed * 0.7f + t * 5.6f) * 0.024f;
 		DrawSolidRect(
 			batch,
 			Vector2(0.0f, y),
 			Vector2(width, h),
-			Color(0.015f + t * 0.06f + wave, 0.03f + t * 0.08f + wave * 0.6f, 0.07f + t * 0.12f + wave * 0.4f, 0.92f));
+			Color(0.016f + t * 0.058f, 0.032f + t * 0.078f, 0.072f + t * 0.116f, 0.92f));
 	}
 
 	const float panelWidth = std::min(760.0f * uiScale, width - 64.0f * uiScale);

@@ -192,13 +192,13 @@ void StageSelectScene::Render()
 	System::UIShaderStyle titleStyle;
 	titleStyle.baseColor = Color(0.9f, 0.95f, 1.0f, 1.0f);
 	titleStyle.outlineColor = Color(0.05f, 0.05f, 0.08f, 1.0f);
-	titleStyle.pulseAmount = 0.1f;
-	titleStyle.pulseSpeed = 2.8f;
+	titleStyle.pulseAmount = 0.0f;
+	titleStyle.pulseSpeed = 0.0f;
 
 	System::UIShaderStyle selectedStyle;
 	selectedStyle.baseColor = Color(0.72f, 0.92f, 1.0f, 1.0f);
 	selectedStyle.outlineColor = Color(0.02f, 0.08f, 0.14f, 1.0f);
-	selectedStyle.pulseAmount = 0.15f;
+	selectedStyle.pulseAmount = 0.0f;
 
 	System::UIShaderStyle normalStyle;
 	normalStyle.baseColor = Color(0.85f, 0.85f, 0.85f, 1.0f);
@@ -211,8 +211,8 @@ void StageSelectScene::Render()
 	System::UIShaderStyle helpStyle;
 	helpStyle.baseColor = Color(1.0f, 0.9f, 0.25f, 1.0f);
 	helpStyle.outlineColor = Color(0.15f, 0.1f, 0.0f, 1.0f);
-	helpStyle.blink = true;
-	helpStyle.blinkPeriod = 0.8f;
+	helpStyle.blink = false;
+	helpStyle.blinkPeriod = 0.0f;
 
 	BeginSpriteLayer();
 	DirectX::SpriteBatch* batch = System::DrawManager::GetInstance().GetSprite();
@@ -237,22 +237,16 @@ void StageSelectScene::Render()
 		const float t = static_cast<float>(band) / 15.0f;
 		const float y = height * t;
 		const float h = (height / 16.0f) + 2.0f;
-		const float wave = std::sinf(m_blinkTimer * 0.9f + t * 6.1f) * 0.03f;
 		DrawSolidRect(
 			batch,
 			Vector2(0.0f, y),
 			Vector2(width, h),
-			Color(0.01f + t * 0.05f + wave * 0.6f, 0.025f + t * 0.08f + wave * 0.5f, 0.055f + t * 0.12f + wave * 0.4f, 0.9f));
+			Color(0.012f + t * 0.046f, 0.026f + t * 0.074f, 0.058f + t * 0.108f, 0.9f));
 	}
 
 	for (int beam = 0; beam < 4; ++beam)
 	{
-		const float speed = 20.0f + static_cast<float>(beam) * 6.5f;
-		float x = std::fmod(m_blinkTimer * speed + 230.0f * static_cast<float>(beam), width + 320.0f) - 160.0f;
-		if (x < -160.0f)
-		{
-			x += width + 320.0f;
-		}
+		const float x = width * (0.14f + static_cast<float>(beam) * 0.22f);
 
 		batch->Draw(
 			m_uiSolidTexture.Get(),
@@ -267,7 +261,7 @@ void StageSelectScene::Render()
 	for (int cloud = 0; cloud < 10; ++cloud)
 	{
 		const float fc = static_cast<float>(cloud);
-		const float loop = std::fmod(m_blinkTimer * (7.0f + std::fmod(fc, 4.0f) * 1.1f) + fc * 13.7f, width + 160.0f) - 80.0f;
+		const float loop = width * (0.06f + std::fmod(fc * 0.11f, 0.82f));
 		const float y = height * 0.12f + std::fmod(fc * 41.0f, height * 0.62f);
 		const float len = 70.0f + std::fmod(fc * 17.0f, 86.0f);
 		DrawSolidRect(batch, Vector2(loop, y), Vector2(len, 8.0f), Color(0.22f, 0.24f, 0.3f, 0.24f));
@@ -358,21 +352,19 @@ void StageSelectScene::Render()
 	const float cardH = 82.0f * uiScale;
 	const float cardGap = 10.0f * uiScale;
 	const float listStartY = rightY + 12.0f * uiScale;
-	const float selectPulse = std::sinf(m_blinkTimer * 5.2f) * 0.5f + 0.5f;
-
 	for (int i = 0; i < 3; ++i)
 	{
 		const bool selected = (i == m_selectedStage);
 		const Color accent = stageAccentColors[static_cast<size_t>(i)];
 		const float y = listStartY + static_cast<float>(i) * (cardH + cardGap);
-		const float pulseBoost = selected ? (0.08f + selectPulse * 0.10f) : 0.0f;
+		const float pulseBoost = selected ? 0.12f : 0.0f;
 		const Color cardColor = selected
 			? Color(0.08f + accent.x * (0.14f + pulseBoost), 0.10f + accent.y * (0.12f + pulseBoost), 0.12f + accent.z * (0.10f + pulseBoost), 0.92f)
 			: Color(0.08f, 0.11f, 0.14f, 0.76f);
 		const Color edgeColor = selected ? accent : Color(accent.x * 0.52f, accent.y * 0.52f, accent.z * 0.52f, 0.62f);
 
 		DrawSolidRect(batch, Vector2(cardX, y), Vector2(cardW, cardH), cardColor);
-		DrawSolidRect(batch, Vector2(cardX, y), Vector2(5.0f * uiScale, cardH), Color(edgeColor.x, edgeColor.y, edgeColor.z, selected ? (0.72f + selectPulse * 0.26f) : 0.46f));
+		DrawSolidRect(batch, Vector2(cardX, y), Vector2(5.0f * uiScale, cardH), Color(edgeColor.x, edgeColor.y, edgeColor.z, selected ? 0.88f : 0.46f));
 		DrawSolidRect(batch, Vector2(cardX, y), Vector2(cardW, std::max(1.0f, 1.5f * uiScale)), edgeColor);
 		DrawSolidRect(batch, Vector2(cardX, y + cardH - 1.5f), Vector2(cardW, std::max(1.0f, 1.5f * uiScale)), edgeColor);
 

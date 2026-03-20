@@ -81,16 +81,9 @@ private:
 	float m_transitionTimer;
 	float m_hintTimer;
 	float m_idleTimer;
-	// タイトル背景デモ用のカメラショット切替。
-	int m_demoShotIndex;
-	float m_demoShotTimer;
 	int m_selectedMenu;
 	SceneId m_nextScene;
 	bool m_inTransition;
-	// クリック時の波紋演出の残り時間。
-	float m_clickFxTimer;
-	// クリック演出の中心座標。
-	DirectX::SimpleMath::Vector2 m_clickFxPos;
 };
 
 

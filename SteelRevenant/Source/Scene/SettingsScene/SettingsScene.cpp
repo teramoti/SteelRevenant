@@ -467,13 +467,13 @@ void SettingsScene::Render()
 	System::UIShaderStyle titleStyle;
 	titleStyle.baseColor = Color(0.9f, 0.95f, 1.0f, 1.0f);
 	titleStyle.outlineColor = Color(0.05f, 0.05f, 0.08f, 1.0f);
-	titleStyle.pulseAmount = 0.08f;
-	titleStyle.pulseSpeed = 2.1f;
+	titleStyle.pulseAmount = 0.0f;
+	titleStyle.pulseSpeed = 0.0f;
 
 	System::UIShaderStyle selectedStyle;
 	selectedStyle.baseColor = Color(0.72f, 0.92f, 1.0f, 1.0f);
 	selectedStyle.outlineColor = Color(0.02f, 0.08f, 0.14f, 1.0f);
-	selectedStyle.pulseAmount = 0.15f;
+	selectedStyle.pulseAmount = 0.0f;
 
 	System::UIShaderStyle normalStyle;
 	normalStyle.baseColor = Color(0.85f, 0.9f, 0.96f, 1.0f);
@@ -505,12 +505,11 @@ void SettingsScene::Render()
 		const float t = static_cast<float>(band) / 13.0f;
 		const float y = height * t;
 		const float h = (height / 14.0f) + 2.0f;
-		const float wave = std::sinf(m_sceneTime * 0.7f + t * 4.2f) * 0.02f;
 		DrawSolidRect(
 			batch,
 			Vector2(0.0f, y),
 			Vector2(width, h),
-			Color(0.01f + t * 0.05f + wave, 0.03f + t * 0.09f + wave * 0.8f, 0.07f + t * 0.13f + wave * 0.6f, 0.92f));
+			Color(0.012f + t * 0.048f, 0.032f + t * 0.084f, 0.074f + t * 0.122f, 0.92f));
 	}
 
 	DrawSolidRect(batch, layout.panelPos, layout.panelSize, Color(0.03f, 0.05f, 0.08f, 0.78f));
@@ -527,10 +526,9 @@ void SettingsScene::Render()
 	ui->Draw(batch, L"AIM PREVIEW", layout.previewPos + Vector2(12.0f * layout.uiScale, 10.0f * layout.uiScale), normalStyle, 0.56f * layout.uiScale);
 
 	const float sensitivityRatio = std::max(0.0f, std::min(1.0f, (m_mouseSensitivity - kSensitivityMin) / (kSensitivityMax - kSensitivityMin)));
-	const float previewPulse = std::sinf(m_sceneTime * (1.4f + sensitivityRatio * 1.6f)) * 0.5f + 0.5f;
 	const Vector2 previewCenter(layout.previewPos.x + layout.previewSize.x * 0.5f, layout.previewPos.y + layout.previewSize.y * 0.62f);
 	const float crossGap = (4.0f + sensitivityRatio * 8.0f) * layout.uiScale;
-	const float crossLen = (8.0f + sensitivityRatio * 12.0f + previewPulse * 2.0f) * layout.uiScale;
+	const float crossLen = (9.0f + sensitivityRatio * 12.0f) * layout.uiScale;
 	DrawSolidRect(batch, previewCenter + Vector2(-crossLen - crossGap, -1.0f * layout.uiScale), Vector2(crossLen, 2.0f * layout.uiScale), Color(0.92f, 0.96f, 1.0f, 0.96f));
 	DrawSolidRect(batch, previewCenter + Vector2(crossGap, -1.0f * layout.uiScale), Vector2(crossLen, 2.0f * layout.uiScale), Color(0.92f, 0.96f, 1.0f, 0.96f));
 	DrawSolidRect(batch, previewCenter + Vector2(-1.0f * layout.uiScale, -crossLen - crossGap), Vector2(2.0f * layout.uiScale, crossLen), Color(0.92f, 0.96f, 1.0f, 0.96f));

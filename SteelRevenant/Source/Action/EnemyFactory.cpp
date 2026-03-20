@@ -35,10 +35,9 @@ namespace Action
 		enemy.pathCursor = 0;
 
 		const int archetypeRoll = (spawnSerial * 37 + clampedDanger * 17) % 10;
-		if (archetypeRoll < 4)
+		if (archetypeRoll < 6)
 		{
 			enemy.archetype = EnemyArchetype::BladeRush;
-			enemy.weaponType = EnemyWeaponType::Melee;
 			enemy.moveRole = EnemyMoveRole::DirectPressure;
 			enemy.moveSpeedScale = 1.18f;
 			enemy.attackRangeScale = 1.08f;
@@ -48,10 +47,9 @@ namespace Action
 			enemy.leashScale = 1.12f;
 			enemy.maxHp *= 0.92f;
 		}
-		else if (archetypeRoll < 7)
+		else
 		{
 			enemy.archetype = EnemyArchetype::BladeFlank;
-			enemy.weaponType = EnemyWeaponType::Melee;
 			enemy.moveRole = EnemyMoveRole::Flank;
 			enemy.moveSpeedScale = 1.08f;
 			enemy.attackRangeScale = 1.00f;
@@ -59,42 +57,6 @@ namespace Action
 			enemy.attackWindupScale = 0.94f;
 			enemy.repathIntervalScale = 0.76f;
 			enemy.leashScale = 1.08f;
-		}
-		else if (archetypeRoll < 9)
-		{
-			enemy.archetype = EnemyArchetype::GunHold;
-			enemy.weaponType = EnemyWeaponType::Ranged;
-			enemy.moveRole = EnemyMoveRole::KeepDistance;
-			enemy.moveSpeedScale = 0.94f;
-			enemy.attackRangeScale = 1.55f;
-			enemy.attackDamageScale = 0.95f;
-			enemy.attackWindupScale = 1.00f;
-			enemy.repathIntervalScale = 0.92f;
-			enemy.leashScale = 1.20f;
-			enemy.idealRangeMin = 8.0f;
-			enemy.idealRangeMax = 11.0f;
-			enemy.aimLeadSec = 0.48f;
-			enemy.projectileSpeed = 22.0f;
-			enemy.attackCooldownSec = 0.95f;
-			enemy.maxHp *= 0.90f;
-		}
-		else
-		{
-			enemy.archetype = EnemyArchetype::GunPressure;
-			enemy.weaponType = EnemyWeaponType::Ranged;
-			enemy.moveRole = EnemyMoveRole::DirectPressure;
-			enemy.moveSpeedScale = 1.02f;
-			enemy.attackRangeScale = 1.35f;
-			enemy.attackDamageScale = 1.12f;
-			enemy.attackWindupScale = 1.08f;
-			enemy.repathIntervalScale = 1.00f;
-			enemy.leashScale = 1.06f;
-			enemy.idealRangeMin = 5.5f;
-			enemy.idealRangeMax = 8.0f;
-			enemy.aimLeadSec = 0.32f;
-			enemy.projectileSpeed = 18.0f;
-			enemy.attackCooldownSec = 0.80f;
-			enemy.maxHp *= 1.08f;
 		}
 
 		enemy.maxHp = std::max(10.0f, enemy.maxHp);

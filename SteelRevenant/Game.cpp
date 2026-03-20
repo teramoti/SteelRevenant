@@ -81,6 +81,7 @@ void Game::Initialize()
 	m_window->Initialize(m_width, m_height);
 	// 生成済みウィンドウのハンドルを保持する。
 	m_hWnd = m_window->GetHWnd();
+	::SetWindowLongPtrW(m_hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
 
 	// Direct3D 初期化に必要なウィンドウ情報を設定する。
 	m_directX.SetHWnd(m_hWnd);
@@ -230,24 +231,30 @@ void Game::Present()
 // 保持中のリソースを解放する。
 void Game::Finalize()
 {
-	// グラフィックス関連リソースを解放する。
-	DirectX11::Dispose();
-	m_window.reset();
-	m_graphics.reset();
+	if (m_hWnd != nullptr)
+	{
+		::SetWindowLongPtrW(m_hWnd, GWLP_USERDATA, 0);
+	}
+
+	if (m_sceneManager != nullptr)
+	{
+		m_sceneManager->FinalizeActiveScene();
+		m_sceneManager.reset();
+	}
+
+	GameAudio::AudioSystem::GetInstance().Shutdown();
+
 	m_keyboard.reset();
 	m_mouse.reset();
 	m_spriteBatch.reset();
 	m_font.reset();
 	m_commonStates.reset();
+	m_graphics.reset();
+
+	// シーンと音声の解放後にグラフィックス関連リソースを落とす。
+	DirectX11::Dispose();
 	m_window.reset();
-	GameAudio::AudioSystem::GetInstance().Shutdown();
-	
-	if (m_sceneManager != nullptr)
-	{
-		m_sceneManager->FinalizeActiveScene();
-		m_sceneManager.reset();
-		m_sceneManager = nullptr;
-	}
+	m_hWnd = nullptr;
 }
 
 // アプリ再アクティブ時の入力状態を整える。

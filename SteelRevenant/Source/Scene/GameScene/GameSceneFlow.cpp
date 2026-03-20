@@ -120,7 +120,7 @@ void GameScene::DrawPauseOverlay(
 
 	System::UIShaderStyle selectedMenuStyle = selectedStyle;
 	selectedMenuStyle.blink = false;
-	selectedMenuStyle.pulseAmount = std::max(selectedMenuStyle.pulseAmount, 0.14f);
+	selectedMenuStyle.pulseAmount = 0.0f;
 
 	System::UIShaderStyle help = helpStyle;
 	help.blink = false;
@@ -161,14 +161,12 @@ void GameScene::DrawPauseOverlay(
 	const float optionGap = 12.0f * uiScale;
 	const float optionStartY = panelPos.y + 96.0f * uiScale;
 	const float optionX = panelPos.x + 27.0f * uiScale;
-	const float selectPulse = std::sinf(m_sceneTime * 5.0f) * 0.5f + 0.5f;
 	for (int optionIndex = 0; optionIndex < kPauseMenuCount; ++optionIndex)
 	{
 		const bool selected = (m_pauseSelectedIndex == optionIndex);
 		const Vector2 optionPos(optionX, optionStartY + static_cast<float>(optionIndex) * (optionHeight + optionGap));
-		const float pulseAlpha = selected ? (0.90f + selectPulse * 0.08f) : 0.84f;
-		DrawSolidRect(batch, optionPos, Vector2(optionWidth, optionHeight), selected ? Color(0.10f, 0.24f, 0.15f, pulseAlpha) : Color(0.06f, 0.09f, 0.12f, 0.84f));
-		DrawSolidRect(batch, optionPos, Vector2(optionWidth, std::max(1.0f, 1.5f * uiScale)), selected ? Color(0.55f, 1.0f, 0.72f, 0.88f + selectPulse * 0.10f) : Color(0.42f, 0.56f, 0.72f, 0.68f));
+		DrawSolidRect(batch, optionPos, Vector2(optionWidth, optionHeight), selected ? Color(0.10f, 0.24f, 0.15f, 0.92f) : Color(0.06f, 0.09f, 0.12f, 0.84f));
+		DrawSolidRect(batch, optionPos, Vector2(optionWidth, std::max(1.0f, 1.5f * uiScale)), selected ? Color(0.55f, 1.0f, 0.72f, 0.94f) : Color(0.42f, 0.56f, 0.72f, 0.68f));
 		uiText->Draw(batch, entries[optionIndex].label, optionPos + Vector2(14.0f * uiScale, 6.0f * uiScale), selected ? selectedMenuStyle : normalStyle, 0.80f * uiScale);
 		uiText->Draw(batch, entries[optionIndex].detail, optionPos + Vector2(14.0f * uiScale, 28.0f * uiScale), selected ? selectedMenuStyle : normalStyle, 0.60f * uiScale);
 	}
@@ -256,7 +254,6 @@ void GameScene::ResetTransientVisualState()
 	m_pauseClickFxTimer = 0.0f;
 	m_pauseClickFxPos = Vector2::Zero;
 	m_slashHitEffects.Reset();
-	m_enemyProjectiles.clear();
 }
 
 // カメラシェイク量を加算する。
@@ -278,7 +275,6 @@ void GameScene::Finalize()
 	m_hazardZones.clear();
 	m_patrolHazards.clear();
 	m_recoveryBeacons.clear();
-	m_enemyProjectiles.clear();
 	ResetTransientVisualState();
 	m_mouseSensitivityView = 0.08f;
 	const Action::CombatTuning& tuning = m_combat.GetTuning();

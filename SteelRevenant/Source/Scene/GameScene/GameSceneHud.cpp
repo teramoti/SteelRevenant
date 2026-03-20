@@ -29,6 +29,7 @@ namespace
 	constexpr float kMiniMapMarkerPlayerPx = 5.0f;
 	constexpr float kMiniMapPlayerHeadingPx = 9.0f;
 	constexpr float kObjectiveBannerDurationSec = 2.8f;
+	constexpr float kStageIntroDurationSec = 1.15f;
 }
 
 // HUD とポーズ UI を描画する。
@@ -55,26 +56,25 @@ void GameScene::DrawUI()
 	System::UIShaderStyle hudStyle;
 	hudStyle.baseColor = Color(0.95f, 0.95f, 0.95f, 1.0f);
 	hudStyle.outlineColor = Color(0.05f, 0.05f, 0.05f, 1.0f);
-	hudStyle.pulseAmount = 0.08f;
+	hudStyle.pulseAmount = 0.0f;
 
 	System::UIShaderStyle warningStyle;
 	warningStyle.baseColor = Color(1.0f, 0.35f, 0.35f, 1.0f);
 	warningStyle.outlineColor = Color(0.1f, 0.0f, 0.0f, 1.0f);
-	warningStyle.pulseAmount = 0.3f;
-	warningStyle.pulseSpeed = 5.0f;
-	warningStyle.blink = true;
-	warningStyle.blinkPeriod = 0.6f;
+	warningStyle.pulseAmount = 0.0f;
+	warningStyle.pulseSpeed = 0.0f;
+	warningStyle.blink = false;
+	warningStyle.blinkPeriod = 0.0f;
 
 	System::UIShaderStyle timerStyle = hudStyle;
 	timerStyle.baseColor = Color(1.0f, 0.95f, 0.75f, 1.0f);
 	timerStyle.outlineColor = Color(0.12f, 0.09f, 0.0f, 1.0f);
-	timerStyle.pulseAmount = 0.13f;
-	timerStyle.pulseSpeed = 3.2f;
+	timerStyle.pulseAmount = 0.0f;
+	timerStyle.pulseSpeed = 0.0f;
 
 	const std::wstring timerText = BuildTimerMMSS(m_gameState.stageTimer);
 	const std::wstring killText = L"\u6483\u7834 " + std::to_wstring(m_gameState.killCount);
 	const std::wstring dangerText = L"DANGER LV " + std::to_wstring(m_gameState.dangerLevel);
-	const std::wstring scoreText = L"SCORE " + std::to_wstring(m_gameState.score);
 	const std::wstring stageText = Action::BattleRuleBook::GetInstance().GetActiveRule().missionName;
 	const std::wstring sensText = L"\u8996\u70b9\u611f\u5ea6 " + UiUtil::ToWStringFixed(m_mouseSensitivityView, 2) + L"  (PgUp/PgDn)";
 	const std::wstring assistRangeText = L"\u88dc\u6b63\u8ddd\u96e2 " + UiUtil::ToWStringFixed(m_attackAssistRangeView, 2) + L"  (Ins/Del)";
@@ -120,7 +120,7 @@ void GameScene::DrawUI()
 	uiText->Draw(batch, timerText, coreHudPos + Vector2(74.0f * uiScale, 21.0f * uiScale), timerStyle, 1.28f * uiScale);
 
 	const float safeMargin = 12.0f * uiScale;
-	const Vector2 progressPanelSize(252.0f * uiScale, 124.0f * uiScale);
+	const Vector2 progressPanelSize(252.0f * uiScale, 106.0f * uiScale);
 	const float progressPanelX = std::max(safeMargin, width - safeMargin - progressPanelSize.x);
 	const Vector2 progressPanelPos(progressPanelX, std::max(safeMargin, 16.0f * uiScale));
 	DrawSolidRect(batch, progressPanelPos, progressPanelSize, Color(0.02f, 0.04f, 0.07f, 0.74f));
@@ -128,8 +128,7 @@ void GameScene::DrawUI()
 	uiText->Draw(batch, L"\u6226\u95d8\u9032\u884c", progressPanelPos + Vector2(14.0f * uiScale, 10.0f * uiScale), hudStyle, 0.60f * uiScale);
 	uiText->Draw(batch, stageText, progressPanelPos + Vector2(14.0f * uiScale, 28.0f * uiScale), hudStyle, 0.72f * uiScale);
 	uiText->Draw(batch, dangerText, progressPanelPos + Vector2(14.0f * uiScale, 49.0f * uiScale), timerStyle, 0.86f * uiScale);
-	uiText->Draw(batch, scoreText, progressPanelPos + Vector2(14.0f * uiScale, 74.0f * uiScale), hudStyle, 0.70f * uiScale);
-	uiText->Draw(batch, killText, progressPanelPos + Vector2(14.0f * uiScale, 94.0f * uiScale), hudStyle, 0.64f * uiScale);
+	uiText->Draw(batch, killText, progressPanelPos + Vector2(14.0f * uiScale, 76.0f * uiScale), hudStyle, 0.66f * uiScale);
 
 	if (GetRequiredRelayCount() > 0)
 	{
@@ -195,6 +194,32 @@ void GameScene::DrawUI()
 	{
 		DrawSolidRect(batch, Vector2(width * 0.5f - 180.0f * uiScale, height * 0.41f), Vector2(360.0f * uiScale, 82.0f * uiScale), Color(0.10f, 0.02f, 0.02f, 0.66f));
 		uiText->Draw(batch, L"TIME OVER", Vector2(width * 0.5f - 126.0f * uiScale, height * 0.45f), warningStyle, 1.24f * uiScale);
+	}
+
+	if (m_stageIntroTimer > 0.0f)
+	{
+		const float introT = Utility::MathEx::Clamp(m_stageIntroTimer / kStageIntroDurationSec, 0.0f, 1.0f);
+		const float fadeAlpha = (introT > 0.55f)
+			? Utility::MathEx::Clamp((introT - 0.55f) / 0.45f, 0.0f, 1.0f)
+			: Utility::MathEx::Clamp(introT / 0.55f, 0.0f, 1.0f);
+		DrawSolidRect(batch, Vector2::Zero, Vector2(width, height), Color(0.01f, 0.02f, 0.03f, 0.78f * fadeAlpha));
+
+		System::UIShaderStyle introTitleStyle = timerStyle;
+		introTitleStyle.blink = false;
+		introTitleStyle.pulseAmount = 0.0f;
+		System::UIShaderStyle introBodyStyle = hudStyle;
+		introBodyStyle.blink = false;
+		introBodyStyle.pulseAmount = 0.0f;
+
+		const Action::StageRuleDefinition& activeRule = Action::BattleRuleBook::GetInstance().GetActiveRule();
+		const float panelWidth = std::min(520.0f * uiScale, width - 48.0f * uiScale);
+		const float panelHeight = 112.0f * uiScale;
+		const Vector2 panelPos((width - panelWidth) * 0.5f, (height - panelHeight) * 0.5f - 18.0f * uiScale);
+		DrawSolidRect(batch, panelPos, Vector2(panelWidth, panelHeight), Color(0.02f, 0.05f, 0.08f, 0.84f * fadeAlpha));
+		DrawSolidRect(batch, panelPos, Vector2(panelWidth, std::max(1.0f, 2.0f * uiScale)), Color(0.70f, 0.88f, 1.0f, 0.90f * fadeAlpha));
+		uiText->Draw(batch, L"DEPLOYING", panelPos + Vector2(18.0f * uiScale, 14.0f * uiScale), introBodyStyle, 0.58f * uiScale);
+		uiText->Draw(batch, activeRule.missionName, panelPos + Vector2(18.0f * uiScale, 36.0f * uiScale), introTitleStyle, 1.08f * uiScale);
+		uiText->Draw(batch, activeRule.missionSummary, panelPos + Vector2(18.0f * uiScale, 70.0f * uiScale), introBodyStyle, 0.60f * uiScale);
 	}
 
 	if (m_isPaused && !m_gameState.IsFinished())

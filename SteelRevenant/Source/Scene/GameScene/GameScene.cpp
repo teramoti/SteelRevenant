@@ -60,6 +60,7 @@ namespace
 	constexpr int kPauseMenuCount = 4;
 	constexpr float kPauseClickFxDurationSec = 0.24f;
 	constexpr float kObjectiveBannerDurationSec = 2.8f;
+	constexpr float kStageIntroDurationSec = 1.15f;
 }
 
 // ゲームシーンの共有参照と初期状態を構築する。
@@ -84,6 +85,7 @@ GameScene::GameScene(SceneManager* scenemaneger)
 	, m_objectiveBannerTimer(0.0f)
 	, m_objectiveBannerText()
 	, m_finishDelay(Action::BattleRuleBook::GetInstance().GetResultDelaySec())
+	, m_stageIntroTimer(0.0f)
 	, m_stageThemeIndex(1)
 	, m_resultPushed(false)
 	, m_showPathDebug(false)
@@ -148,6 +150,7 @@ void GameScene::Initialize()
 	m_pauseClickFxPos = Vector2::Zero;
 	m_recoveryBeaconUseCount = 0;
 	m_requiredRelayCount = 0;
+	m_stageIntroTimer = kStageIntroDurationSec;
 	m_objectiveBannerTimer = kObjectiveBannerDurationSec;
 	m_objectiveBannerText = Action::BattleRuleBook::GetInstance().GetActiveRule().missionSummary;
 

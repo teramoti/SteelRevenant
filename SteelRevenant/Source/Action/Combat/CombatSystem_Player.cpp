@@ -186,7 +186,6 @@ namespace Action
 				enemy.state = EnemyStateType::Dead;
 				Action::CombatInternal::ClearEnemyPathState(enemy);
 				enemy.hasWanderTarget = false;
-				enemy.hasTacticalTarget = false;
 				gameState.killCount += 1;
 				player.comboGauge = std::min(100.0f, player.comboGauge + m_tuning.comboGaugeKillBonus);
 				killedAny = true;
@@ -197,7 +196,6 @@ namespace Action
 				enemy.stateTimer = std::max(enemy.stateTimer, m_tuning.enemyHitStunSec);
 				Action::CombatInternal::ClearEnemyPathState(enemy);
 				enemy.hasWanderTarget = false;
-				enemy.hasTacticalTarget = false;
 			}
 		}
 

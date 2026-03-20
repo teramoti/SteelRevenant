@@ -24,7 +24,7 @@ namespace
 	constexpr float kWalkSpeed = 7.2f;
 	constexpr float kMoveAccelGain = 13.0f;
 	constexpr float kMoveStopGain = 19.0f;
-	constexpr float kDamageGraceSec = 0.20f;
+	constexpr float kDamageGraceSec = 0.30f;
 	constexpr float kPlayerBoundsMin = -28.0f;
 	constexpr float kPlayerBoundsMax = 28.0f;
 
@@ -50,11 +50,9 @@ namespace
 
 	constexpr float kEnemyRepathSec = 0.25f;
 	constexpr float kEnemyMeleeAttackTriggerDistance = 2.1f;
-	constexpr float kEnemyRangedAttackTriggerDistance = 8.0f;
 	constexpr float kEnemyMeleeAttackReach = 2.2f;
-	constexpr float kEnemyRangedAttackReach = 10.0f;
 	constexpr float kEnemyFlankOffset = 6.0f;
-	constexpr float kEnemyAttackWindupSec = 0.42f;
+	constexpr float kEnemyAttackWindupSec = 0.62f;
 	constexpr float kEnemyMoveSpeedBase = 3.1f;
 	constexpr float kEnemyMoveSpeedPerDanger = 0.52f;
 	constexpr float kEnemyIdleWakeupDistance = 18.0f;
@@ -65,19 +63,12 @@ namespace
 
 	constexpr float kEnemyMeleeDamageBase = 12.0f;
 	constexpr float kEnemyMeleeDamagePerDanger = 2.3f;
-	constexpr float kEnemyRangedDamageBase = 8.0f;
-	constexpr float kEnemyRangedDamagePerDanger = 1.7f;
 	constexpr float kEnemyMeleeGuardDamageScale = 0.35f;
-	constexpr float kEnemyRangedGuardDamageScale = 0.55f;
 	constexpr float kEnemyWanderSpeedScale = 0.55f;
 	constexpr float kEnemyWanderMinDistance = 4.0f;
 	constexpr int kEnemyWanderCandidateAttempts = 8;
 	constexpr float kEnemyWanderPauseMinSec = 0.6f;
 	constexpr float kEnemyWanderPauseMaxSec = 1.4f;
-	constexpr float kGunHoldRepositionSec = 1.4f;
-	constexpr float kGunPressureRepositionSec = 1.0f;
-	constexpr float kGunHoldAngleRad = DirectX::XMConvertToRadians(70.0f);
-	constexpr float kGunPressureAngleRad = DirectX::XMConvertToRadians(35.0f);
 
 	constexpr float kAttackRangeDefault = 2.6f;
 	constexpr float kAttackDotThresholdDefault = 0.30f;
@@ -133,17 +124,6 @@ namespace
 		return dist(rng);
 	}
 
-	// XZ 平面上のベクトルを Y 軸回転させる。
-	Vector3 RotateAroundY(const Vector3& direction, float radians)
-	{
-		const float c = std::cos(radians);
-		const float s = std::sin(radians);
-		return Vector3(
-			direction.x * c - direction.z * s,
-			0.0f,
-			direction.x * s + direction.z * c);
-	}
-
 // 意思決定結果をEnemyStateへ反映する。
 	void ApplyEnemyIntent(Action::EnemyState& enemy, EnemyDecisionIntent intent, const Action::CombatTuning& tuning)
 	{
@@ -155,7 +135,6 @@ namespace
 				enemy.state = Action::EnemyStateType::Idle;
 				Action::CombatInternal::ClearEnemyPathState(enemy);
 				enemy.hasWanderTarget = false;
-				enemy.hasTacticalTarget = false;
 			}
 			break;
 
@@ -165,7 +144,6 @@ namespace
 				enemy.state = Action::EnemyStateType::Wander;
 				Action::CombatInternal::ClearEnemyPathState(enemy);
 				enemy.hasWanderTarget = false;
-				enemy.hasTacticalTarget = false;
 			}
 			break;
 
@@ -179,17 +157,7 @@ namespace
 			break;
 
 		case EnemyDecisionIntent::Attack:
-			if (enemy.weaponType == Action::EnemyWeaponType::Ranged)
-			{
-				if (enemy.state != Action::EnemyStateType::Aim && enemy.state != Action::EnemyStateType::Attack)
-				{
-					enemy.state = Action::EnemyStateType::Aim;
-					enemy.stateTimer = tuning.enemyAttackWindupSec * enemy.attackWindupScale;
-					Action::CombatInternal::ClearEnemyPathState(enemy);
-					enemy.hasWanderTarget = false;
-				}
-			}
-			else if (enemy.state != Action::EnemyStateType::Attack)
+			if (enemy.state != Action::EnemyStateType::Attack)
 			{
 				enemy.state = Action::EnemyStateType::Attack;
 				enemy.stateTimer = tuning.enemyAttackWindupSec * enemy.attackWindupScale;
@@ -204,7 +172,6 @@ namespace
 				enemy.state = Action::EnemyStateType::Return;
 				Action::CombatInternal::ClearEnemyPathState(enemy);
 				enemy.hasWanderTarget = false;
-				enemy.hasTacticalTarget = false;
 			}
 			break;
 
@@ -284,18 +251,6 @@ namespace
 			const float sign = (std::sin(enemy.spawnPosition.x + enemy.spawnPosition.z) >= 0.0f) ? 1.0f : -1.0f;
 			target += playerRight * (tuning.enemyFlankOffset * sign);
 		}
-		else if (enemy.moveRole == Action::EnemyMoveRole::KeepDistance)
-		{
-			Vector3 toEnemy = enemy.position - playerPos;
-			toEnemy.y = 0.0f;
-			if (toEnemy.LengthSquared() < 0.0001f)
-			{
-				toEnemy = Vector3::UnitX;
-			}
-			toEnemy.Normalize();
-			const float desired = 0.5f * (enemy.idealRangeMin + enemy.idealRangeMax);
-			target = playerPos + toEnemy * desired;
-		}
 
 		return target;
 	}
@@ -326,46 +281,6 @@ namespace
 
 		const Action::PathGrid::GridCoord fallback = FindNearestWalkable(grid, grid.WorldToGrid(enemy.spawnPosition));
 		return grid.GridToWorld(fallback, enemy.position.y);
-	}
-
-	// 射撃敵の位置取り先を構築する。
-	Vector3 BuildRangedTacticalTarget(
-		const Action::EnemyState& enemy,
-		const Vector3& playerPos,
-		std::mt19937& rng)
-	{
-		Vector3 radial = enemy.position - playerPos;
-		radial.y = 0.0f;
-		if (radial.LengthSquared() <= 0.0001f)
-		{
-			radial = Vector3::UnitX;
-		}
-		radial.Normalize();
-
-		const bool isGunHold = (enemy.archetype == Action::EnemyArchetype::GunHold);
-		const float idealMin = enemy.idealRangeMin;
-		const float idealMax = enemy.idealRangeMax;
-		const float currentDistance = FlatDistance(enemy.position, playerPos);
-		const float angle = RandomFloat(rng, isGunHold ? -kGunHoldAngleRad : -kGunPressureAngleRad, isGunHold ? kGunHoldAngleRad : kGunPressureAngleRad);
-		Vector3 targetDir = RotateAroundY(radial, angle);
-
-		float desiredDistance = Utility::MathEx::Clamp(currentDistance, idealMin, idealMax);
-		if (currentDistance < idealMin * 0.85f)
-		{
-			desiredDistance = idealMax;
-		}
-		else if (currentDistance > idealMax * 1.15f)
-		{
-			desiredDistance = idealMin;
-		}
-
-		targetDir = Utility::MathEx::SafeNormalize(targetDir);
-		if (targetDir.LengthSquared() <= 0.0001f)
-		{
-			targetDir = radial;
-		}
-
-		return playerPos + targetDir * desiredDistance;
 	}
 
 	// 危険度を反映した移動速度を返す。
@@ -447,9 +362,7 @@ namespace Action
 			m_tuning.comboGaugeKillBonus = kComboGaugeKillBonus;
 			m_tuning.enemyRepathSec = kEnemyRepathSec;
 			m_tuning.enemyMeleeAttackTriggerDistance = kEnemyMeleeAttackTriggerDistance;
-			m_tuning.enemyRangedAttackTriggerDistance = kEnemyRangedAttackTriggerDistance;
 			m_tuning.enemyMeleeAttackReach = kEnemyMeleeAttackReach;
-			m_tuning.enemyRangedAttackReach = kEnemyRangedAttackReach;
 			m_tuning.enemyFlankOffset = kEnemyFlankOffset;
 			m_tuning.enemyAttackWindupSec = kEnemyAttackWindupSec;
 			m_tuning.enemyMoveSpeedBase = kEnemyMoveSpeedBase;
@@ -461,10 +374,7 @@ namespace Action
 			m_tuning.enemyHitStunSec = kEnemyHitStunSec;
 			m_tuning.enemyMeleeDamageBase = kEnemyMeleeDamageBase;
 			m_tuning.enemyMeleeDamagePerDanger = kEnemyMeleeDamagePerDanger;
-			m_tuning.enemyRangedDamageBase = kEnemyRangedDamageBase;
-			m_tuning.enemyRangedDamagePerDanger = kEnemyRangedDamagePerDanger;
 			m_tuning.enemyMeleeGuardDamageScale = kEnemyMeleeGuardDamageScale;
-			m_tuning.enemyRangedGuardDamageScale = kEnemyRangedGuardDamageScale;
 		}
 
 		// 戦闘調整値を現在設定へ反映する。
@@ -533,8 +443,6 @@ namespace Action
 		for (size_t i = 0; i < enemies.size(); ++i)
 		{
 			EnemyState& enemy = enemies[i];
-			enemy.firedProjectileThisFrame = false;
-			enemy.projectileDamage = 0.0f;
 			if (enemy.state == EnemyStateType::Dead)
 			{
 				continue;
@@ -543,25 +451,18 @@ namespace Action
 			enemy.stateTimer = std::max(0.0f, enemy.stateTimer - dt);
 			enemy.repathTimer = std::max(0.0f, enemy.repathTimer - dt);
 			enemy.wanderPauseSec = std::max(0.0f, enemy.wanderPauseSec - dt);
-			enemy.tacticalMoveTimer = std::max(0.0f, enemy.tacticalMoveTimer - dt);
 
 			const float distToPlayer = FlatDistance(enemy.position, player.position);
 			const float distToSpawn = FlatDistance(enemy.position, enemy.spawnPosition);
 			const size_t lodRank = enemyRankByIndex[i];
-			const bool highDetail = lodRank < 20;
-			const bool midDetail = lodRank >= 20 && lodRank < 40;
-			const float repathLodScale = highDetail ? 1.0f : (midDetail ? 2.0f : 4.0f);
-			const float tacticalLodScale = highDetail ? 1.0f : (midDetail ? 2.0f : 4.0f);
+			const float repathLodScale = (lodRank < 20) ? 1.0f : ((lodRank < 40) ? 2.0f : 4.0f);
 			const float wakeupDistance = m_tuning.enemyIdleWakeupDistance * (0.85f + enemy.attackRangeScale * 0.15f);
-			const float triggerDistance =
-				(enemy.weaponType == EnemyWeaponType::Ranged)
-				? (m_tuning.enemyRangedAttackTriggerDistance * enemy.attackRangeScale)
-				: (m_tuning.enemyMeleeAttackTriggerDistance * enemy.attackRangeScale);
+			const float triggerDistance = m_tuning.enemyMeleeAttackTriggerDistance * enemy.attackRangeScale;
 
 			// tuning反映版の意思決定（BTより優先）。
 			EnemyDecisionContext context(enemy, distToPlayer, distToSpawn);
 			context.intent = EnemyDecisionIntent::None;
-			if ((enemy.state == EnemyStateType::Attack || enemy.state == EnemyStateType::Aim) && enemy.stateTimer > 0.0f)
+			if (enemy.state == EnemyStateType::Attack && enemy.stateTimer > 0.0f)
 			{
 				context.intent = EnemyDecisionIntent::Attack;
 			}
@@ -588,8 +489,7 @@ namespace Action
 				}
 				else if (distToPlayer <= wakeupDistance ||
 					enemy.state == EnemyStateType::Chase ||
-					enemy.state == EnemyStateType::Attack ||
-					enemy.state == EnemyStateType::Aim)
+					enemy.state == EnemyStateType::Attack)
 				{
 					context.intent = EnemyDecisionIntent::Chase;
 				}
@@ -638,20 +538,6 @@ namespace Action
 				if (enemy.repathTimer <= 0.0f || enemy.path.empty() || enemy.pathCursor >= enemy.path.size())
 				{
 					Vector3 chaseTarget = BuildRoleTarget(enemy, player.position, player.yaw, m_tuning);
-					if (enemy.weaponType == EnemyWeaponType::Ranged)
-					{
-						if (!enemy.hasTacticalTarget || enemy.tacticalMoveTimer <= 0.0f)
-						{
-							enemy.tacticalTarget = BuildRangedTacticalTarget(enemy, player.position, m_rng);
-							enemy.hasTacticalTarget = true;
-							enemy.tacticalMoveTimer =
-								(enemy.archetype == EnemyArchetype::GunHold)
-								? (kGunHoldRepositionSec * tacticalLodScale)
-								: (kGunPressureRepositionSec * tacticalLodScale);
-						}
-						chaseTarget = enemy.tacticalTarget;
-					}
-
 					RepathToWorld(enemy, grid, solver, s_navMesh, chaseTarget);
 					if (enemy.path.empty() || enemy.pathCursor >= enemy.path.size())
 					{
@@ -662,12 +548,6 @@ namespace Action
 
 				const float moveSpeed = BuildEnemyMoveSpeed(m_tuning, enemy, gameState.dangerLevel);
 				moveDir = MoveAlongPath(enemy, grid, moveSpeed, dt);
-				if (enemy.weaponType == EnemyWeaponType::Ranged &&
-					enemy.hasTacticalTarget &&
-					FlatDistance(enemy.position, enemy.tacticalTarget) <= 1.2f)
-				{
-					enemy.hasTacticalTarget = false;
-				}
 			}
 			else if (enemy.state == EnemyStateType::Return)
 			{
@@ -677,7 +557,6 @@ namespace Action
 					enemy.stateTimer = RandomFloat(m_rng, kEnemyWanderPauseMinSec, kEnemyWanderPauseMaxSec);
 					enemy.wanderPauseSec = enemy.stateTimer;
 					enemy.hasWanderTarget = false;
-					enemy.hasTacticalTarget = false;
 					Action::CombatInternal::ClearEnemyPathState(enemy);
 				}
 				else
@@ -690,84 +569,36 @@ namespace Action
 					moveDir = MoveAlongPath(enemy, grid, BuildEnemyMoveSpeed(m_tuning, enemy, gameState.dangerLevel) * 0.9f, dt);
 				}
 			}
-			else if (enemy.state == EnemyStateType::Aim)
+			else if (enemy.state == EnemyStateType::Attack)
 			{
 				if (enemy.stateTimer <= 0.0f)
 				{
-					enemy.state = EnemyStateType::Attack;
-					enemy.stateTimer = enemy.attackCooldownSec;
-				}
-			}
-			else if (enemy.state == EnemyStateType::Attack)
-			{
-				if (enemy.weaponType == EnemyWeaponType::Melee)
-				{
-					if (enemy.stateTimer <= 0.0f)
-					{
-						const float attackReach = m_tuning.enemyMeleeAttackReach * enemy.attackRangeScale;
-						if (distToPlayer <= attackReach)
-						{
-							if (player.damageGraceTimer <= 0.0f)
-							{
-								const float dangerBoost = static_cast<float>(std::max(0, gameState.dangerLevel - 1));
-								float damage = (m_tuning.enemyMeleeDamageBase + dangerBoost * m_tuning.enemyMeleeDamagePerDanger) * enemy.attackDamageScale;
-								if (player.guarding)
-								{
-									damage *= m_tuning.enemyMeleeGuardDamageScale;
-								}
-								gameState.stageTimer = std::max(0.0f, gameState.stageTimer - 1.0f);
-								gameState.damageTaken += static_cast<int>(std::round(damage));
-								if (gameState.stageTimer <= 0.0f)
-								{
-									gameState.stageTimer = 0.0f;
-									gameState.timeExpired = true;
-								}
-								player.damageGraceTimer = m_tuning.damageGraceSec;
-								GameAudio::AudioSystem::GetInstance().PlaySe(
-									player.guarding ? GameAudio::SeId::GuardBlock : GameAudio::SeId::PlayerHit,
-									player.guarding ? 0.72f : 0.84f);
-							}
-						}
-
-						enemy.state = EnemyStateType::Chase;
-						enemy.stateTimer = 0.0f;
-						Action::CombatInternal::ClearEnemyPathState(enemy);
-						enemy.hasWanderTarget = false;
-						enemy.hasTacticalTarget = false;
-					}
-				}
-				else if (enemy.stateTimer > 0.0f && enemy.stateTimer <= enemy.attackCooldownSec * 0.5f)
-				{
-					const float attackReach = m_tuning.enemyRangedAttackReach * enemy.attackRangeScale;
+					const float attackReach = m_tuning.enemyMeleeAttackReach * enemy.attackRangeScale;
 					if (distToPlayer <= attackReach)
 					{
-						const float dangerBoost = static_cast<float>(std::max(0, gameState.dangerLevel - 1));
-						float damage = (m_tuning.enemyRangedDamageBase + dangerBoost * m_tuning.enemyRangedDamagePerDanger) * enemy.attackDamageScale;
-						const Vector3 enemyForward(std::sin(enemy.yaw), 0.0f, std::cos(enemy.yaw));
-						const Vector3 enemyRight(enemyForward.z, 0.0f, -enemyForward.x);
-						const Vector3 muzzlePos = enemy.position + enemyRight * 0.34f + Vector3(0.0f, 1.02f, 0.0f) + enemyForward * 0.32f;
-						const Vector3 targetPoint = player.position + Vector3(0.0f, 0.92f, 0.0f) + player.moveVelocity * enemy.aimLeadSec;
-						Vector3 fireDir = Utility::MathEx::SafeNormalize(targetPoint - muzzlePos);
-						if (fireDir.LengthSquared() <= 0.0001f)
+						if (player.damageGraceTimer <= 0.0f)
 						{
-							fireDir = enemyForward;
-						}
-						enemy.projectileSpawnPosition = muzzlePos;
-						enemy.projectileVelocity = fireDir * std::max(8.0f, enemy.projectileSpeed);
-						enemy.projectileDamage = damage;
-						enemy.firedProjectileThisFrame = true;
-						enemy.stateTimer = -1.0f;
-						if (highDetail || distToPlayer <= attackReach * 0.8f)
-						{
+							const float dangerBoost = static_cast<float>(std::max(0, gameState.dangerLevel - 1));
+							float damage = (m_tuning.enemyMeleeDamageBase + dangerBoost * m_tuning.enemyMeleeDamagePerDanger) * enemy.attackDamageScale;
+							if (player.guarding)
+							{
+								damage *= m_tuning.enemyMeleeGuardDamageScale;
+							}
+							gameState.stageTimer = std::max(0.0f, gameState.stageTimer - 1.0f);
+							gameState.damageTaken += static_cast<int>(std::round(damage));
+							if (gameState.stageTimer <= 0.0f)
+							{
+								gameState.stageTimer = 0.0f;
+								gameState.timeExpired = true;
+							}
+							player.damageGraceTimer = m_tuning.damageGraceSec;
 							GameAudio::AudioSystem::GetInstance().PlaySe(
-								GameAudio::SeId::EnemyShot,
-								(enemy.archetype == EnemyArchetype::GunPressure) ? 0.74f : 0.62f);
+								player.guarding ? GameAudio::SeId::GuardBlock : GameAudio::SeId::PlayerHit,
+								player.guarding ? 0.72f : 0.84f);
 						}
 					}
-				}
-				else if (enemy.stateTimer <= 0.0f)
-				{
 					enemy.state = EnemyStateType::Chase;
+					enemy.stateTimer = 0.0f;
 					Action::CombatInternal::ClearEnemyPathState(enemy);
 					enemy.hasWanderTarget = false;
 				}
