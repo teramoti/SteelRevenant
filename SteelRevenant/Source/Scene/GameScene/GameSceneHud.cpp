@@ -1,4 +1,4 @@
-﻿//------------------------//------------------------
+//------------------------//------------------------
 // Contents(処理内容) HUD と目的表示の描画処理を実装する。
 //------------------------//------------------------
 // user(作成者) Keishi Teramoto
@@ -28,7 +28,6 @@ namespace
 	constexpr float kMiniMapMarkerEnemyPx = 2.6f;
 	constexpr float kMiniMapMarkerPlayerPx = 5.0f;
 	constexpr float kMiniMapPlayerHeadingPx = 9.0f;
-	constexpr float kObjectiveBannerDurationSec = 2.8f;
 	constexpr float kStageIntroDurationSec = 1.15f;
 }
 
@@ -75,7 +74,15 @@ void GameScene::DrawUI()
 	const std::wstring timerText = BuildTimerMMSS(m_gameState.stageTimer);
 	const std::wstring killText = L"\u6483\u7834 " + std::to_wstring(m_gameState.killCount);
 	const std::wstring dangerText = L"DANGER LV " + std::to_wstring(m_gameState.dangerLevel);
-	const std::wstring stageText = Action::BattleRuleBook::GetInstance().GetActiveRule().missionName;
+	const bool speedUpActive = m_speedUpTimer > 0.0f;
+	const std::wstring speedText = speedUpActive
+		? (L"SPEED UP  " + std::to_wstring(static_cast<int>(std::ceil(m_speedUpTimer))) + L"s")
+		: L"";
+	const std::wstring waveText =
+		L"WAVE " + std::to_wstring(m_survivalDirector.GetCurrentWave()) + L" / " + std::to_wstring(m_survivalDirector.GetTotalWaveCount());
+	const std::wstring waveRemainText =
+		L"\u6b8b\u6575 " + std::to_wstring(m_survivalDirector.GetRemainingEnemiesInWave(CountLivingEnemies()));
+	
 	const std::wstring sensText = L"\u8996\u70b9\u611f\u5ea6 " + UiUtil::ToWStringFixed(m_mouseSensitivityView, 2) + L"  (PgUp/PgDn)";
 	const std::wstring assistRangeText = L"\u88dc\u6b63\u8ddd\u96e2 " + UiUtil::ToWStringFixed(m_attackAssistRangeView, 2) + L"  (Ins/Del)";
 	const std::wstring assistAngleText = L"\u88dc\u6b63\u89d2\u5ea6 " + UiUtil::ToWStringFixed(m_attackAssistDotView, 2) + L"  (Home/End)";
@@ -120,30 +127,34 @@ void GameScene::DrawUI()
 	uiText->Draw(batch, timerText, coreHudPos + Vector2(74.0f * uiScale, 21.0f * uiScale), timerStyle, 1.28f * uiScale);
 
 	const float safeMargin = 12.0f * uiScale;
-	const Vector2 progressPanelSize(252.0f * uiScale, 106.0f * uiScale);
+	const Vector2 progressPanelSize(252.0f * uiScale, 126.0f * uiScale);
 	const float progressPanelX = std::max(safeMargin, width - safeMargin - progressPanelSize.x);
 	const Vector2 progressPanelPos(progressPanelX, std::max(safeMargin, 16.0f * uiScale));
 	DrawSolidRect(batch, progressPanelPos, progressPanelSize, Color(0.02f, 0.04f, 0.07f, 0.74f));
 	DrawSolidRect(batch, progressPanelPos, Vector2(progressPanelSize.x, std::max(1.0f, 2.0f * uiScale)), Color(0.55f, 0.88f, 1.0f, 0.86f));
 	uiText->Draw(batch, L"\u6226\u95d8\u9032\u884c", progressPanelPos + Vector2(14.0f * uiScale, 10.0f * uiScale), hudStyle, 0.60f * uiScale);
 	uiText->Draw(batch, stageText, progressPanelPos + Vector2(14.0f * uiScale, 28.0f * uiScale), hudStyle, 0.72f * uiScale);
-	uiText->Draw(batch, dangerText, progressPanelPos + Vector2(14.0f * uiScale, 49.0f * uiScale), timerStyle, 0.86f * uiScale);
-	uiText->Draw(batch, killText, progressPanelPos + Vector2(14.0f * uiScale, 76.0f * uiScale), hudStyle, 0.66f * uiScale);
+	uiText->Draw(batch, waveText, progressPanelPos + Vector2(14.0f * uiScale, 49.0f * uiScale), timerStyle, 0.84f * uiScale);
+	uiText->Draw(batch, waveRemainText, progressPanelPos + Vector2(14.0f * uiScale, 70.0f * uiScale), hudStyle, 0.62f * uiScale);
+	uiText->Draw(batch, dangerText, progressPanelPos + Vector2(14.0f * uiScale, 89.0f * uiScale), timerStyle, 0.70f * uiScale);
+	uiText->Draw(batch, killText, progressPanelPos + Vector2(132.0f * uiScale, 89.0f * uiScale), hudStyle, 0.62f * uiScale);
 
-	if (GetRequiredRelayCount() > 0)
+	if (m_survivalDirector.IsWaveBreak())
 	{
-		const std::wstring relayText = L"Relay " + std::to_wstring(GetCapturedRelayCount()) + L" / " + std::to_wstring(GetRequiredRelayCount());
+		const float breakRatio = m_survivalDirector.GetWaveBreakRatio();
+		DrawSolidRect(batch, progressPanelPos + Vector2(14.0f * uiScale, 108.0f * uiScale), Vector2(progressPanelSize.x - 28.0f * uiScale, 7.0f * uiScale), Color(0.08f, 0.08f, 0.1f, 0.88f));
+		DrawSolidRect(batch, progressPanelPos + Vector2(14.0f * uiScale, 108.0f * uiScale), Vector2((progressPanelSize.x - 28.0f * uiScale) * breakRatio, 7.0f * uiScale), Color(0.42f, 0.88f, 1.0f, 0.92f));
+	}
+
+	{
 		const Vector2 relayPanelSize(252.0f * uiScale, 102.0f * uiScale);
 		const float relayPanelX = std::max(safeMargin, width - safeMargin - relayPanelSize.x);
 		const Vector2 relayPanelPos(relayPanelX, progressPanelPos.y + progressPanelSize.y + 8.0f * uiScale);
 		DrawSolidRect(batch, relayPanelPos, relayPanelSize, Color(0.02f, 0.05f, 0.08f, 0.72f));
 		DrawSolidRect(batch, relayPanelPos, Vector2(relayPanelSize.x, std::max(1.0f, 2.0f * uiScale)), Color(0.35f, 0.95f, 0.78f, 0.86f));
 		uiText->Draw(batch, L"\u526f\u76ee\u6a19", relayPanelPos + Vector2(14.0f * uiScale, 10.0f * uiScale), hudStyle, 0.56f * uiScale);
-		uiText->Draw(batch, relayText, relayPanelPos + Vector2(14.0f * uiScale, 32.0f * uiScale), timerStyle, 0.78f * uiScale);
 		uiText->Draw(batch, L"Relay\u5236\u5727 / \u88dc\u7d66 / \u5ef6\u547d", relayPanelPos + Vector2(14.0f * uiScale, 56.0f * uiScale), hudStyle, 0.46f * uiScale);
-		const float relayRatio = Utility::MathEx::Clamp(static_cast<float>(GetCapturedRelayCount()) / static_cast<float>(std::max(1, GetRequiredRelayCount())), 0.0f, 1.0f);
 		DrawSolidRect(batch, relayPanelPos + Vector2(14.0f * uiScale, 80.0f * uiScale), Vector2(relayPanelSize.x - 28.0f * uiScale, 7.0f * uiScale), Color(0.08f, 0.08f, 0.1f, 0.88f));
-		DrawSolidRect(batch, relayPanelPos + Vector2(14.0f * uiScale, 80.0f * uiScale), Vector2((relayPanelSize.x - 28.0f * uiScale) * relayRatio, 7.0f * uiScale), Color(0.34f, 1.0f, 0.58f, 0.92f));
 	}
 	if (m_showHudDetail)
 	{
@@ -166,19 +177,8 @@ void GameScene::DrawUI()
 
 	DrawMiniMap(batch, uiText, hudStyle);
 
-	if (m_objectiveBannerTimer > 0.0f && !m_objectiveBannerText.empty())
-	{
-		const float t = Utility::MathEx::Clamp(m_objectiveBannerTimer / kObjectiveBannerDurationSec, 0.0f, 1.0f);
-		const float alpha = 0.22f + t * 0.62f;
-		const float bannerWidth = std::min(560.0f * uiScale, width - 54.0f * uiScale);
-		const float bannerLeft = (width - bannerWidth) * 0.5f;
-		DrawSolidRect(batch, Vector2(bannerLeft, 40.0f * uiScale), Vector2(bannerWidth, 40.0f * uiScale), Color(0.02f, 0.08f, 0.1f, alpha));
-		System::UIShaderStyle bannerStyle = warningStyle;
-		bannerStyle.baseColor = Color(0.86f, 0.98f, 1.0f, 1.0f);
-		bannerStyle.outlineColor = Color(0.02f, 0.04f, 0.06f, 1.0f);
-		bannerStyle.blink = false;
-		uiText->Draw(batch, m_objectiveBannerText, Vector2(bannerLeft + 14.0f * uiScale, 50.0f * uiScale), bannerStyle, 0.66f * uiScale);
-	}
+	// ウェーブクリア / ステージクリアバナーはゲーム進行で制御
+
 
 	if (m_showPathDebug)
 	{
@@ -194,6 +194,11 @@ void GameScene::DrawUI()
 	{
 		DrawSolidRect(batch, Vector2(width * 0.5f - 180.0f * uiScale, height * 0.41f), Vector2(360.0f * uiScale, 82.0f * uiScale), Color(0.10f, 0.02f, 0.02f, 0.66f));
 		uiText->Draw(batch, L"TIME OVER", Vector2(width * 0.5f - 126.0f * uiScale, height * 0.45f), warningStyle, 1.24f * uiScale);
+	}
+	else if (m_gameState.stageCleared)
+	{
+		DrawSolidRect(batch, Vector2(width * 0.5f - 220.0f * uiScale, height * 0.39f), Vector2(440.0f * uiScale, 92.0f * uiScale), Color(0.02f, 0.10f, 0.08f, 0.70f));
+		uiText->Draw(batch, L"MISSION CLEAR", Vector2(width * 0.5f - 160.0f * uiScale, height * 0.435f), timerStyle, 1.18f * uiScale);
 	}
 
 	if (m_stageIntroTimer > 0.0f)
@@ -225,6 +230,17 @@ void GameScene::DrawUI()
 	if (m_isPaused && !m_gameState.IsFinished())
 	{
 		DrawPauseOverlay(batch, uiText, timerStyle, warningStyle, hudStyle, warningStyle, width, height);
+	}
+
+	// 速度UP効果中は画面上部に表示
+	if (speedUpActive)
+	{
+		System::UIShaderStyle speedStyle = hudStyle;
+		speedStyle.baseColor = Color(0.25f, 1.0f, 0.45f, 1.0f);
+		speedStyle.outlineColor = Color(0.0f, 0.10f, 0.02f, 1.0f);
+		uiText->DrawString(batch, speedText.c_str(),
+			DirectX::SimpleMath::Vector2(width * 0.5f - 60.0f * uiScale, 48.0f * uiScale),
+			1.1f * uiScale, speedStyle);
 	}
 
 	EndSpriteLayer();
@@ -308,27 +324,8 @@ void GameScene::DrawMiniMap(DirectX::SpriteBatch* batch, System::UIShaderText* u
 			Color(0.95f, 0.28f, 0.28f, 0.95f));
 	}
 
-	for (size_t relayIndex = 0; relayIndex < m_relayNodes.size(); ++relayIndex)
-	{
-		const RelayNodeInfo& relay = m_relayNodes[relayIndex];
-		const Vector2 relayPoint = ToMiniMapPoint(relay.position, mapTopLeft, miniMapSize);
-		const Color relayColor = relay.captured ? Color(0.34f, 1.0f, 0.58f, 0.96f) : Color(0.32f, 0.92f, 1.0f, 0.94f);
-		DrawSolidRect(batch, relayPoint - Vector2(4.2f, 4.2f), Vector2(8.4f, 8.4f), relayColor);
-	}
 
-	for (size_t beaconIndex = 0; beaconIndex < m_recoveryBeacons.size(); ++beaconIndex)
-	{
-		const RecoveryBeaconInfo& beacon = m_recoveryBeacons[beaconIndex];
-		const Vector2 beaconPoint = ToMiniMapPoint(beacon.position, mapTopLeft, miniMapSize);
-		const Color beaconColor = (beacon.cooldownSec <= 0.0f) ? Color(0.5f, 1.0f, 0.92f, 0.96f) : Color(0.46f, 0.62f, 0.74f, 0.82f);
-		DrawSolidRect(batch, beaconPoint - Vector2(3.2f, 3.2f), Vector2(6.4f, 6.4f), beaconColor);
-	}
 
-	for (size_t patrolIndex = 0; patrolIndex < m_patrolHazards.size(); ++patrolIndex)
-	{
-		const Vector2 patrolPoint = ToMiniMapPoint(EvaluatePatrolHazardPosition(patrolIndex), mapTopLeft, miniMapSize);
-		DrawSolidRect(batch, patrolPoint - Vector2(3.8f, 3.8f), Vector2(7.6f, 7.6f), Color(1.0f, 0.72f, 0.18f, 0.96f));
-	}
 
 	if (m_player.lockEnemyIndex >= 0 && m_player.lockEnemyIndex < static_cast<int>(m_enemies.size()))
 	{

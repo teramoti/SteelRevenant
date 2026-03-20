@@ -1,34 +1,30 @@
-//------------------------//------------------------
-// Contents(処理内容) サバイバル進行で共有する実行時状態を宣言する。
-//------------------------//------------------------
-// user(作成者) Keishi Teramoto
-// Created date(作成日) 2026 / 03 / 16
-// last updated (最終更新日) 2026 / 03 / 18
-//------------------------//------------------------
 #pragma once
 
 namespace Action
 {
+	// 戦闘ステージの進行集計をまとめる軽量ステート。
 	struct GameState
 	{
-		// 現在の残り時間(秒)。
+		// 残り制限時間。
 		float stageTimer;
-		// 開始からの経過時間(秒)。
+		// 経過時間。
 		float survivalTimeSec;
-		// 現在の総合スコア。
+		// ライブスコア。
 		int score;
-		// 現在の危険度。
+		// 現在危険度。
 		int dangerLevel;
-		// 到達済みの最大危険度。
+		// 到達した最大危険度。
 		int peakDangerLevel;
-		// 現在撃破数。
+		// 累計撃破数。
 		int killCount;
-		// 被ダメージ累計。
+		// 被ダメージ集計。
 		int damageTaken;
-		// 制限時間が尽きたか。
+		// 時間切れになったか。
 		bool timeExpired;
+		// 最終ウェーブを制圧したか。
+		bool stageCleared;
 
-		// サバイバル進行状態を既定値で初期化する。
+		// 既定値で状態を構築する。
 		GameState()
 			: stageTimer(300.0f)
 			, survivalTimeSec(0.0f)
@@ -38,10 +34,11 @@ namespace Action
 			, killCount(0)
 			, damageTaken(0)
 			, timeExpired(false)
+			, stageCleared(false)
 		{
 		}
 
-		// ステージ開始時の状態へ戻す。
+		// ステージ開始時の集計値へ戻す。
 		void Reset(float startTimer)
 		{
 			stageTimer = startTimer;
@@ -52,12 +49,13 @@ namespace Action
 			killCount = 0;
 			damageTaken = 0;
 			timeExpired = false;
+			stageCleared = false;
 		}
 
-		// 時間経過を反映し、時間切れで終了状態へ遷移する。
+		// 戦闘中のみタイマーと経過時間を進める。
 		void Tick(float dt)
 		{
-			if (timeExpired)
+			if (timeExpired || stageCleared)
 			{
 				return;
 			}
@@ -71,10 +69,10 @@ namespace Action
 			}
 		}
 
-		// リザルト遷移条件を満たしたか返す。
+		// 時間切れまたは制圧完了で終了扱いとする。
 		bool IsFinished() const
 		{
-			return timeExpired;
+			return timeExpired || stageCleared;
 		}
 	};
 }

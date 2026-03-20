@@ -28,12 +28,17 @@ namespace Action
 	{
 		const float dt = std::max(0.0f, input.dt);
 		const float playerGroundY = std::max(0.8f, groundHeight);
+		const float windupSec = std::max(0.0f, m_tuning.comboAttackWindupSec);
+		const float activeSec = std::max(0.0f, m_tuning.comboAttackActiveSec);
+		const float followThroughSec = std::max(0.0f, m_tuning.comboAttackFollowThroughSec);
+		const float recoverSec = std::max(0.0f, m_tuning.comboAttackRecoverSec);
+		const float attackMotionTotalSec = windupSec + activeSec + followThroughSec + recoverSec;
 		player.attackTriggeredThisFrame = false;
+		player.swingTrailActive = false;
 
 		player.yaw = Utility::MathEx::WrapRadians(player.yaw + input.mouseDelta.x * m_tuning.playerYawScale);
 
 		player.damageGraceTimer = std::max(0.0f, player.damageGraceTimer - dt);
-		player.attackTimer = std::max(0.0f, player.attackTimer - dt);
 		player.attackCooldown = std::max(0.0f, player.attackCooldown - dt);
 		player.comboTimer = std::max(0.0f, player.comboTimer - dt);
 		player.comboGauge = std::max(0.0f, player.comboGauge - dt * m_tuning.comboGaugeDecayPerSec);
@@ -55,7 +60,82 @@ namespace Action
 			player.comboLevel = 0;
 		}
 
-		if (player.attackTimer <= 0.0f && player.comboTimer <= 0.0f)
+		player.attackPhaseBlend = 0.0f;
+		switch (player.attackPhase)
+		{
+		case PlayerAttackPhase::Windup:
+			player.attackPhaseTimer = std::max(0.0f, player.attackPhaseTimer - dt);
+			player.attackWindupTimer = player.attackPhaseTimer;
+			player.attackTimer = activeSec;
+			player.attackPhaseBlend = (windupSec > 0.0f)
+				? 1.0f - Utility::MathEx::Clamp(player.attackPhaseTimer / windupSec, 0.0f, 1.0f)
+				: 1.0f;
+			if (player.attackPhaseTimer <= 0.0f)
+			{
+				player.attackPhase = PlayerAttackPhase::Active;
+				player.attackPhaseTimer = activeSec;
+				player.attackWindupTimer = 0.0f;
+				player.attackTimer = activeSec;
+				player.attackPhaseBlend = 0.0f;
+			}
+			break;
+
+		case PlayerAttackPhase::Active:
+			player.attackPhaseTimer = std::max(0.0f, player.attackPhaseTimer - dt);
+			player.attackWindupTimer = 0.0f;
+			player.attackTimer = player.attackPhaseTimer;
+			player.attackPhaseBlend = (activeSec > 0.0f)
+				? 1.0f - Utility::MathEx::Clamp(player.attackPhaseTimer / activeSec, 0.0f, 1.0f)
+				: 1.0f;
+			if (player.attackPhaseTimer <= 0.0f)
+			{
+				player.attackPhase = PlayerAttackPhase::FollowThrough;
+				player.attackPhaseTimer = followThroughSec;
+				player.attackTimer = 0.0f;
+				player.attackPhaseBlend = 0.0f;
+			}
+			break;
+
+		case PlayerAttackPhase::FollowThrough:
+			player.attackPhaseTimer = std::max(0.0f, player.attackPhaseTimer - dt);
+			player.attackWindupTimer = 0.0f;
+			player.attackTimer = 0.0f;
+			player.attackPhaseBlend = (followThroughSec > 0.0f)
+				? 1.0f - Utility::MathEx::Clamp(player.attackPhaseTimer / followThroughSec, 0.0f, 1.0f)
+				: 1.0f;
+			if (player.attackPhaseTimer <= 0.0f)
+			{
+				player.attackPhase = PlayerAttackPhase::Recover;
+				player.attackPhaseTimer = recoverSec;
+				player.attackPhaseBlend = 0.0f;
+			}
+			break;
+
+		case PlayerAttackPhase::Recover:
+			player.attackPhaseTimer = std::max(0.0f, player.attackPhaseTimer - dt);
+			player.attackWindupTimer = 0.0f;
+			player.attackTimer = 0.0f;
+			player.attackPhaseBlend = (recoverSec > 0.0f)
+				? 1.0f - Utility::MathEx::Clamp(player.attackPhaseTimer / recoverSec, 0.0f, 1.0f)
+				: 1.0f;
+			if (player.attackPhaseTimer <= 0.0f)
+			{
+				player.attackPhase = PlayerAttackPhase::Idle;
+				player.attackPhaseTimer = 0.0f;
+				player.attackPhaseBlend = 0.0f;
+			}
+			break;
+
+		case PlayerAttackPhase::Idle:
+		default:
+			player.attackPhase = PlayerAttackPhase::Idle;
+			player.attackPhaseTimer = 0.0f;
+			player.attackWindupTimer = 0.0f;
+			player.attackTimer = 0.0f;
+			break;
+		}
+
+		if (player.attackPhase == PlayerAttackPhase::Idle && player.comboTimer <= 0.0f)
 		{
 			player.comboIndex = 0;
 		}
@@ -78,7 +158,7 @@ namespace Action
 		if (input.moveLeft) { moveDir -= moveRight; }
 		moveDir = Utility::MathEx::SafeNormalize(moveDir);
 
-		if (input.attackPressed && player.attackCooldown <= 0.0f)
+		if (input.attackPressed && player.attackCooldown <= 0.0f && player.attackPhase == PlayerAttackPhase::Idle)
 		{
 			if (player.comboTimer > 0.0f)
 			{
@@ -89,8 +169,12 @@ namespace Action
 				player.comboIndex = 1;
 			}
 
-			player.attackTimer = m_tuning.comboAttackWindowSec;
-			player.attackCooldown = m_tuning.comboCooldownSec;
+			player.attackPhase = PlayerAttackPhase::Windup;
+			player.attackPhaseBlend = 0.0f;
+			player.attackPhaseTimer = windupSec;
+			player.attackWindupTimer = windupSec;
+			player.attackTimer = activeSec;
+			player.attackCooldown = std::max(m_tuning.comboCooldownSec, attackMotionTotalSec);
 			player.comboTimer = m_tuning.comboChainWindowSec;
 			player.attackTriggeredThisFrame = true;
 			GameAudio::AudioSystem::GetInstance().PlaySe(GameAudio::SeId::MeleeSlash, 0.82f);
@@ -108,6 +192,12 @@ namespace Action
 
 		player.position.x = Utility::MathEx::Clamp(player.position.x, m_tuning.playerBoundsMin, m_tuning.playerBoundsMax);
 		player.position.z = Utility::MathEx::Clamp(player.position.z, m_tuning.playerBoundsMin, m_tuning.playerBoundsMax);
+
+		if (player.attackPhase == PlayerAttackPhase::Active ||
+			(player.attackPhase == PlayerAttackPhase::FollowThrough && player.attackPhaseBlend < 0.5f))
+		{
+			player.swingTrailActive = true;
+		}
 	}
 
 // プレイヤー攻撃のヒット判定とダメージを解決する。
@@ -117,7 +207,7 @@ namespace Action
 		std::vector<EnemyState>& enemies,
 		GameState& gameState) const
 	{
-		if (player.attackTimer <= 0.0f || player.comboIndex <= 0)
+		if (player.attackPhase != PlayerAttackPhase::Active || player.attackTimer <= 0.0f || player.comboIndex <= 0)
 		{
 			return;
 		}
@@ -176,6 +266,8 @@ namespace Action
 
 			enemy.hitByCurrentSwing = true;
 			enemy.hp -= static_cast<float>(damage);
+			enemy.hitReactTimer = m_tuning.enemyHitStunSec;
+			enemy.knockbackVelocity = toEnemy * (m_tuning.enemyKnockbackSpeed + static_cast<float>(player.comboIndex - 1) * 0.8f);
 			hitAny = true;
 
 			player.comboGauge = std::min(100.0f, player.comboGauge + m_tuning.comboGaugeHitGain);
@@ -184,6 +276,8 @@ namespace Action
 			{
 				enemy.hp = 0.0f;
 				enemy.state = EnemyStateType::Dead;
+				enemy.hitReactTimer = 0.0f;
+				enemy.knockbackVelocity = Vector3::Zero;
 				Action::CombatInternal::ClearEnemyPathState(enemy);
 				enemy.hasWanderTarget = false;
 				gameState.killCount += 1;
@@ -193,7 +287,7 @@ namespace Action
 			else
 			{
 				enemy.state = EnemyStateType::Chase;
-				enemy.stateTimer = std::max(enemy.stateTimer, m_tuning.enemyHitStunSec);
+				enemy.stateTimer = 0.0f;
 				Action::CombatInternal::ClearEnemyPathState(enemy);
 				enemy.hasWanderTarget = false;
 			}

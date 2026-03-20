@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 //--------------------------------------------------------------------------------------
 // File: GameScene.h
@@ -54,20 +54,6 @@ public:
 private:
 	// 現在ステージの配置と描画リソースをまとめて初期化する。
 	void SetupStage();
-	// 中継地点とハザード領域を配置する。
-	void SetupRelayNodesAndHazards();
-	// アリーナ目標レイヤの進行表示を更新する。
-	void UpdateArenaObjectiveLayer(float dt);
-	// 指定座標がハザード領域内か判定して返す。
-	bool IsInsideHazardZone(const DirectX::SimpleMath::Vector3& position, size_t zoneIndex) const;
-	// 指定ハザードの巡回基準座標を返す。
-	DirectX::SimpleMath::Vector3 EvaluatePatrolHazardPosition(size_t hazardIndex) const;
-	// 指定範囲内の生存敵数を返す。
-	int CountLivingEnemiesNear(const DirectX::SimpleMath::Vector3& position, float radius) const;
-	// 制圧済み中継地点数を返す。
-	int GetCapturedRelayCount() const;
-	// クリア条件に必要な中継地点数を返す。
-	int GetRequiredRelayCount() const;
 	// 現在不足している敵を補充する。
 	void SpawnEnemyBatch(bool initialSpawn);
 	// 現在の条件から敵出現候補位置を収集する。
@@ -171,47 +157,29 @@ private:
 		float maxZ;
 	};
 	std::vector<ObstacleBounds> m_obstacleBounds;
-	struct RelayNodeInfo
+
+	// =========================================================================
+	// 速度UPアイテム
+	// 敵撃破時に一定確率でドロップ。プレイヤーが接触すると取得。
+	// =========================================================================
+	struct SpeedUpItem
 	{
-		DirectX::SimpleMath::Vector3 position;
-		float radius;
-		float captureProgress;
-		bool captured;
-		float pulseSeed;
+		DirectX::SimpleMath::Vector3 position; ///< ワールド座標
+		float lifetimeSec;                     ///< 残存時間 (秒)
+		float pulseSeed;                       ///< 描画パルスシード
+		bool  active;                          ///< 有効フラグ
 	};
-	struct HazardZoneInfo
-	{
-		DirectX::SimpleMath::Vector3 center;
-		DirectX::SimpleMath::Vector2 halfExtent;
-		float phaseOffsetSec;
-		float warmupSec;
-		float activeSec;
-		float damagePerSec;
-	};
-	struct PatrolHazardInfo
-	{
-		DirectX::SimpleMath::Vector3 start;
-		DirectX::SimpleMath::Vector3 end;
-		float radius;
-		float cycleSpeed;
-		float damagePerSec;
-		float phaseSeed;
-	};
-	struct RecoveryBeaconInfo
-	{
-		DirectX::SimpleMath::Vector3 position;
-		float radius;
-		float cooldownSec;
-		float maxCooldownSec;
-		float pulseSeed;
-	};
-	std::vector<RelayNodeInfo> m_relayNodes;
-	std::vector<HazardZoneInfo> m_hazardZones;
-	std::vector<PatrolHazardInfo> m_patrolHazards;
-	std::vector<RecoveryBeaconInfo> m_recoveryBeacons;
-	int m_requiredRelayCount;
-	float m_objectiveBannerTimer;
-	std::wstring m_objectiveBannerText;
+	std::vector<SpeedUpItem> m_speedUpItems;   ///< フィールド上のアイテムリスト
+	float m_speedUpTimer;                      ///< 速度UP効果残り時間 (秒)
+	float m_speedUpMultiplier;                 ///< 速度UP倍率
+
+	// アイテムをフィールドに配置する。
+	void SpawnSpeedUpItem(const DirectX::SimpleMath::Vector3& position);
+	// アイテムの更新（取得判定・寿命）を行う。
+	void UpdateSpeedUpItems(float dt);
+	// アイテムをアリーナに描画する。
+	void DrawSpeedUpItems();
+
 	SceneFx::SlashHitEffectSystem m_slashHitEffects;
 	std::unique_ptr<SceneFx::IStageFloorStyle> m_floorStyle;
 
@@ -242,7 +210,6 @@ private:
 	int m_pauseSelectedIndex;
 	float m_pauseClickFxTimer;
 	DirectX::SimpleMath::Vector2 m_pauseClickFxPos;
-	int m_recoveryBeaconUseCount;
 
 	float m_finishDelay;
 	float m_stageIntroTimer;
@@ -250,4 +217,5 @@ private:
 	bool m_resultPushed;
 	bool m_showPathDebug;
 	bool m_showHudDetail;
+	bool m_isFinalized;
 };

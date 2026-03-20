@@ -1,4 +1,4 @@
-﻿//------------------------//------------------------
+//------------------------//------------------------
 // Contents(処理内容) 本編ゲームシーンのフレーム更新処理を実装する。
 //------------------------//------------------------
 // user(作成者) Keishi Teramoto
@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <vector>
 
 #include <Keyboard.h>
@@ -200,7 +201,26 @@ void GameScene::UpdateCombatFrame(float dt, const Action::InputSnapshot& input)
 			return;
 		}
 		m_combat.ResolvePlayerAttack(m_player, m_enemies, m_gameState);
-		UpdateArenaObjectiveLayer(dt);
+		UpdateSpeedUpItems(dt);
+
+		// 撃破時アイテムドロップ判定 (30% 確率)
+		// hitStateBefore で「このフレームに新たに命中した敵」を特定し、
+		// かつ Dead 状態になっているものだけを対象にすることで
+		// 毎フレーム重複ドロップを防ぐ
+		for (size_t ei = 0; ei < m_enemies.size(); ++ei)
+		{
+			if (ei >= hitStateBefore.size()) { continue; }
+			if (!hitStateBefore[ei] &&
+				m_enemies[ei].state == Action::EnemyStateType::Dead &&
+				m_enemies[ei].hp <= 0.0f)
+			{
+				const float roll = static_cast<float>(std::rand() % 100) * 0.01f;
+				if (roll < 0.30f)
+				{
+					SpawnSpeedUpItem(m_enemies[ei].position);
+				}
+			}
+		}
 
 		int newlyHitCount = 0;
 		for (size_t enemyIndex = 0; enemyIndex < m_enemies.size(); ++enemyIndex)
@@ -335,6 +355,11 @@ void GameScene::UpdateSurvivalFlow()
 	if (!m_gameState.IsFinished())
 	{
 		SpawnEnemyBatch(false);
+	}
+	// 全ウェーブ完了かつ残敵ゼロでステージクリア
+	if (!m_gameState.timeExpired && !m_gameState.stageCleared && m_survivalDirector.IsCompleted() && CountLivingEnemies() <= 0)
+	{
+		m_gameState.stageCleared = true;
 	}
 	m_gameState.score = ComputeStageScore();
 }

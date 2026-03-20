@@ -1,14 +1,5 @@
 #pragma once
 
-//--------------------------------------------------------------------------------------
-// File: CombatSystem.h
-//
-// プレイヤー戦闘、敵AI、移動更新で共有するデータ型と公開APIを定義する。
-// - プレイヤー入力と状態
-// - 近接専用の敵状態
-// - 戦闘更新に使う調整値と CombatSystem 本体
-//--------------------------------------------------------------------------------------
-
 #include <cstddef>
 #include <random>
 #include <vector>
@@ -21,6 +12,7 @@
 
 namespace Action
 {
+	// 戦闘バランス調整値をひとまとめに保持する。
 	struct CombatTuning
 	{
 		float playerYawScale;
@@ -50,6 +42,10 @@ namespace Action
 		float comboGaugeDecayPerSec;
 		float comboGaugeHitGain;
 		float comboGaugeKillBonus;
+		float comboAttackWindupSec;
+		float comboAttackActiveSec;
+		float comboAttackFollowThroughSec;
+		float comboAttackRecoverSec;
 
 		float enemyRepathSec;
 		float enemyMeleeAttackTriggerDistance;
@@ -63,12 +59,15 @@ namespace Action
 		float enemyLeashDistance;
 		float enemyReturnArriveDistance;
 		float enemyHitStunSec;
+		float enemyKnockbackSpeed;
+		float enemyKnockbackDamping;
 
 		float enemyMeleeDamageBase;
 		float enemyMeleeDamagePerDanger;
 		float enemyMeleeGuardDamageScale;
 	};
 
+	// 1 フレーム分の入力をゲームループから切り出したスナップショット。
 	struct InputSnapshot
 	{
 		float dt;
@@ -82,6 +81,16 @@ namespace Action
 		bool lockTogglePressed;
 	};
 
+	enum class PlayerAttackPhase
+	{
+		Idle,
+		Windup,
+		Active,
+		FollowThrough,
+		Recover
+	};
+
+	// プレイヤー戦闘状態を保持する。
 	struct PlayerState
 	{
 		DirectX::SimpleMath::Vector3 position;
@@ -91,13 +100,20 @@ namespace Action
 		float damageGraceTimer;
 		DirectX::SimpleMath::Vector3 moveVelocity;
 		float attackTimer;
+		float attackWindupTimer;
 		float attackCooldown;
+		float attackPhaseTimer;
 		float comboTimer;
 		int comboIndex;
 		float comboGauge;
 		int comboLevel;
 		int lockEnemyIndex;
+		PlayerAttackPhase attackPhase;
+		float attackPhaseBlend;
 		bool attackTriggeredThisFrame;
+		DirectX::SimpleMath::Vector3 swingTrailBase;
+		DirectX::SimpleMath::Vector3 swingTrailTip;
+		bool swingTrailActive;
 
 		PlayerState()
 			: position(0.0f, 0.8f, 0.0f)
@@ -107,13 +123,20 @@ namespace Action
 			, damageGraceTimer(0.0f)
 			, moveVelocity(DirectX::SimpleMath::Vector3::Zero)
 			, attackTimer(0.0f)
+			, attackWindupTimer(0.0f)
 			, attackCooldown(0.0f)
+			, attackPhaseTimer(0.0f)
 			, comboTimer(0.0f)
 			, comboIndex(0)
 			, comboGauge(0.0f)
 			, comboLevel(0)
 			, lockEnemyIndex(-1)
+			, attackPhase(PlayerAttackPhase::Idle)
+			, attackPhaseBlend(0.0f)
 			, attackTriggeredThisFrame(false)
+			, swingTrailBase(DirectX::SimpleMath::Vector3::Zero)
+			, swingTrailTip(DirectX::SimpleMath::Vector3::Zero)
+			, swingTrailActive(false)
 		{
 		}
 	};
@@ -140,6 +163,7 @@ namespace Action
 		BladeFlank
 	};
 
+	// 敵 1 体分の戦闘状態を保持する。
 	struct EnemyState
 	{
 		DirectX::SimpleMath::Vector3 position;
@@ -159,9 +183,11 @@ namespace Action
 		float stateTimer;
 		float repathTimer;
 		float wanderPauseSec;
+		float hitReactTimer;
 		bool hitByCurrentSwing;
 		bool hasWanderTarget;
 		DirectX::SimpleMath::Vector3 wanderTarget;
+		DirectX::SimpleMath::Vector3 knockbackVelocity;
 		std::vector<PathGrid::GridCoord> path;
 		size_t pathCursor;
 
@@ -183,14 +209,17 @@ namespace Action
 			, stateTimer(0.0f)
 			, repathTimer(0.0f)
 			, wanderPauseSec(0.0f)
+			, hitReactTimer(0.0f)
 			, hitByCurrentSwing(false)
 			, hasWanderTarget(false)
 			, wanderTarget(DirectX::SimpleMath::Vector3::Zero)
+			, knockbackVelocity(DirectX::SimpleMath::Vector3::Zero)
 			, pathCursor(0)
 		{
 		}
 	};
 
+	// プレイヤーと敵の更新を担当する戦闘モジュール。
 	class CombatSystem
 	{
 	public:

@@ -1,17 +1,10 @@
-//------------------------//------------------------
-// Contents(処理内容) プレイヤー・敵・武器・エフェクトの描画を実装する。
-//------------------------//------------------------
-// user(作成者) Keishi Teramoto
-// Created date(作成日) 2026 / 03 / 16
-// last updated (最終更新日) 2026 / 03 / 20
-//------------------------//------------------------
 #include "../GameScene.h"
 
 #include <algorithm>
 #include <cmath>
 
-#include <DirectXMath.h>
 #include <DirectXColors.h>
+#include <DirectXMath.h>
 
 #include "../../../Utility/SimpleMathEx.h"
 #include "../EnemyVisualProfile.h"
@@ -24,474 +17,521 @@ using DirectX::SimpleMath::Vector3;
 
 namespace
 {
-    constexpr float kAttackVisualDurationSec    = 0.18f;
-    constexpr float kWeaponSwingYawRad          = 1.45f;
-    constexpr float kWeaponSwingPitchRad        = 1.15f;
-    constexpr float kPlayerRunCycleSpeed        = 7.6f;
-    constexpr float kEnemyBreathSpeed           = 4.8f;
-    constexpr float kEnemySpawnDurationSec      = 0.4f;
-    constexpr float kEnemyAttackWindupVisualSec = 0.45f;
+	constexpr float kPlayerRunCycleSpeed = 7.6f;
+	constexpr float kEnemyBreathSpeed = 4.8f;
+	constexpr float kEnemySpawnDurationSec = 0.4f;
+	constexpr float kEnemyAttackWindupVisualSec = 0.45f;
 
-    // 剣の色定義（冷たい金属表現）
-    const Color kBladeColor       = { 0.80f, 0.84f, 0.90f, 1.0f }; // 刃身ベース
-    const Color kBladeEdgeColor   = { 0.95f, 0.97f, 1.00f, 1.0f }; // 刃縁（明るい）
-    const Color kBladeFullerColor = { 0.52f, 0.55f, 0.62f, 1.0f }; // 血溝（暗め）
-    const Color kBladeFlatColor   = { 0.62f, 0.65f, 0.72f, 1.0f }; // 平面（やや暗め）
-    const Color kGuardColor       = { 0.35f, 0.30f, 0.20f, 1.0f }; // 鍔（真鍮）
-    const Color kGuardTrimColor   = { 0.55f, 0.48f, 0.30f, 1.0f }; // 鍔トリム
-    const Color kGripColor        = { 0.13f, 0.09f, 0.07f, 1.0f }; // 柄（黒革）
-    const Color kGripWrapColor    = { 0.20f, 0.16f, 0.12f, 1.0f }; // 柄巻き
-    const Color kPommelColor      = { 0.42f, 0.36f, 0.24f, 1.0f }; // 柄頭
+	const Color kBladeColor = { 0.80f, 0.84f, 0.90f, 1.0f };
+	const Color kBladeEdgeColor = { 0.95f, 0.97f, 1.00f, 1.0f };
+	const Color kBladeFullerColor = { 0.52f, 0.55f, 0.62f, 1.0f };
+	const Color kBladeFlatColor = { 0.62f, 0.65f, 0.72f, 1.0f };
+	const Color kGuardColor = { 0.30f, 0.26f, 0.18f, 1.0f };
+	const Color kGuardTrimColor = { 0.72f, 0.60f, 0.34f, 1.0f };
+	const Color kGripColor = { 0.20f, 0.34f, 0.58f, 1.0f };
+	const Color kGripWrapColor = { 0.12f, 0.18f, 0.30f, 1.0f };
+	const Color kPommelColor = { 0.42f, 0.36f, 0.24f, 1.0f };
+	const Color kTrailCoreColor = { 0.72f, 0.44f, 0.98f, 1.0f };
+	const Color kTrailRimColor = { 0.38f, 0.94f, 1.00f, 1.0f };
+
+	float LerpFloat(float a, float b, float t)
+	{
+		return a + (b - a) * Utility::MathEx::Clamp(t, 0.0f, 1.0f);
+	}
+
+	Vector3 LerpVector(const Vector3& a, const Vector3& b, float t)
+	{
+		return Vector3(
+			LerpFloat(a.x, b.x, t),
+			LerpFloat(a.y, b.y, t),
+			LerpFloat(a.z, b.z, t));
+	}
+
+	float EaseInCubic(float t)
+	{
+		t = Utility::MathEx::Clamp(t, 0.0f, 1.0f);
+		return t * t * t;
+	}
+
+	float EaseOutCubic(float t)
+	{
+		t = Utility::MathEx::Clamp(t, 0.0f, 1.0f);
+		const float inv = 1.0f - t;
+		return 1.0f - inv * inv * inv;
+	}
+
+	float BuildSwingEase(float attackBlend)
+	{
+		if (attackBlend < 0.5f)
+		{
+			return 4.0f * attackBlend * attackBlend * attackBlend;
+		}
+		return 1.0f - std::powf(-2.0f * attackBlend + 2.0f, 3.0f) * 0.5f;
+	}
+
+	Vector3 SafeNormalize(const Vector3& value, const Vector3& fallback)
+	{
+		Vector3 result = value;
+		if (result.LengthSquared() <= 0.0001f)
+		{
+			result = fallback;
+		}
+		else
+		{
+			result.Normalize();
+		}
+		return result;
+	}
 }
 
 void GameScene::DrawWorldActors()
 {
-    const SceneFx::StageRenderPalette palette = SceneFx::BuildStageRenderPalette(m_stageThemeIndex, m_sceneTime);
-    const auto StageTint = [&palette](const Color& base, float alphaScale = 1.0f) -> Color
-    {
-        return SceneFx::ApplyStageTint(palette, base, alphaScale);
-    };
-    const auto DrawShadow = [&](const Vector3& pos, float sx, float sz, float alpha)
-    {
-        m_effectOrbMesh->Draw(
-            Matrix::CreateScale(sx, 0.05f, sz) * Matrix::CreateTranslation(pos.x, 0.055f, pos.z),
-            m_view, m_proj, StageTint(Color(0.01f, 0.015f, 0.02f, alpha)));
-    };
-    const auto Lf = [](float a, float b, float t) -> float
-    {
-        return a + (b - a) * Utility::MathEx::Clamp(t, 0.0f, 1.0f);
-    };
-    const auto Lv = [&Lf](const Vector3& a, const Vector3& b, float t) -> Vector3
-    {
-        return { Lf(a.x,b.x,t), Lf(a.y,b.y,t), Lf(a.z,b.z,t) };
-    };
+	const SceneFx::StageRenderPalette palette = SceneFx::BuildStageRenderPalette(m_stageThemeIndex, m_sceneTime);
+	const auto StageTint = [&palette](const Color& base, float alphaScale = 1.0f) -> Color
+	{
+		return SceneFx::ApplyStageTint(palette, base, alphaScale);
+	};
+	const auto DrawShadow = [&](const Vector3& pos, float sx, float sz, float alpha)
+	{
+		m_effectOrbMesh->Draw(
+			Matrix::CreateScale(sx, 0.05f, sz) * Matrix::CreateTranslation(pos.x, 0.055f, pos.z),
+			m_view, m_proj, StageTint(Color(0.01f, 0.015f, 0.02f, alpha)));
+	};
 
-    // =========================================================================
-    // プレイヤー描画
-    // =========================================================================
-    const float attackBlend = GetAttackBlend();
-    const float carryBlend  = Utility::MathEx::Clamp(attackBlend, 0.0f, 1.0f);
-    const float comboSign   = (m_player.comboIndex % 2 == 0) ? -1.0f : 1.0f;
-    const float runCycle    = std::sinf(m_sceneTime * kPlayerRunCycleSpeed);
-    const float legSwing    = runCycle * 0.26f;
-    const float armPulse    = runCycle * 0.18f;
+	const Action::CombatTuning& tuning = m_combat.GetTuning();
+	const float attackBlend = GetAttackBlend();
+	const float runCycle = std::sinf(m_sceneTime * kPlayerRunCycleSpeed);
+	const float legSwing = runCycle * 0.26f;
+	const float attackTotalSec =
+		std::max(0.0f, tuning.comboAttackWindupSec) +
+		std::max(0.0f, tuning.comboAttackActiveSec) +
+		std::max(0.0f, tuning.comboAttackFollowThroughSec) +
+		std::max(0.0f, tuning.comboAttackRecoverSec);
 
-    const SceneFx::PlayerVisualProfile pv = SceneFx::BuildPlayerVisualProfile(m_player, m_sceneTime);
-    const Vector3 forward(std::sin(m_player.yaw), 0.0f, std::cos(m_player.yaw));
-    const Vector3 right(forward.z, 0.0f, -forward.x);
+	struct GreatswordPose
+	{
+		Vector3 gripLocal;
+		float rootYawOffset;
+		float rootLift;
+		float rootForward;
+		float bladeYaw;
+		float bladePitch;
+		float bladeRoll;
+	};
 
-    DrawShadow(m_player.position, 0.56f, 0.78f, 0.18f);
+	const auto LerpPose = [](const GreatswordPose& a, const GreatswordPose& b, float t) -> GreatswordPose
+	{
+		GreatswordPose pose = {};
+		pose.gripLocal = LerpVector(a.gripLocal, b.gripLocal, t);
+		pose.rootYawOffset = LerpFloat(a.rootYawOffset, b.rootYawOffset, t);
+		pose.rootLift = LerpFloat(a.rootLift, b.rootLift, t);
+		pose.rootForward = LerpFloat(a.rootForward, b.rootForward, t);
+		pose.bladeYaw = LerpFloat(a.bladeYaw, b.bladeYaw, t);
+		pose.bladePitch = LerpFloat(a.bladePitch, b.bladePitch, t);
+		pose.bladeRoll = LerpFloat(a.bladeRoll, b.bladeRoll, t);
+		return pose;
+	};
 
-    const Matrix pRoot =
-        Matrix::CreateRotationY(m_player.yaw + attackBlend * comboSign * 0.08f) *
-        Matrix::CreateTranslation(m_player.position + Vector3(0.0f, std::sinf(m_sceneTime * 4.4f) * 0.04f, 0.0f));
+	const GreatswordPose guardPose =
+	{
+		// gripLocal: 胸前の中段構え
+		// x=0.08右寄り  y=0.88胸高さ  z=0.20前方
+		Vector3(0.08f, 0.88f + std::fabs(runCycle) * 0.012f, 0.20f),
+		0.02f,                         // rootYawOffset: ほぼ正面
+		std::fabs(runCycle) * 0.016f,  // rootLift: 走り上下動
+		0.04f,                         // rootForward: 軽く前傾
+		0.06f,                         // bladeYaw: 正面向き
+		0.65f,                         // bladePitch: +値=刃先が前方上方（中段構え）
+		0.08f                          // bladeRoll: わずかに内側
+	};
 
-    // 胴体
-    m_enemyMesh->Draw(
-        Matrix::CreateScale(0.44f, 0.62f, 0.44f) * Matrix::CreateRotationX(attackBlend * 0.3f) *
-        Matrix::CreateTranslation(0.0f, 1.0f, attackBlend * 0.12f) * pRoot,
-        m_view, m_proj, pv.armorLight);
+	GreatswordPose windupPose = guardPose;
+	GreatswordPose activePose = guardPose;
+	GreatswordPose followPose = guardPose;
+	switch (std::clamp(m_player.comboIndex, 1, 3))
+	{
+	case 2:
+		// 左から右への返し斬り
+		windupPose = { Vector3(-0.28f, 0.90f, -0.04f), -0.16f, 0.02f, 0.02f,  1.08f, 0.48f, -0.24f };
+		activePose = { Vector3( 0.28f, 0.84f,  0.24f),  0.16f, 0.00f, 0.12f, -0.94f, 0.46f,  0.28f };
+		followPose = { Vector3( 0.18f, 0.82f,  0.22f),  0.10f,-0.01f, 0.10f, -0.60f, 0.44f,  0.16f };
+		break;
 
-    // 頭部
-    m_enemyMesh->Draw(
-        Matrix::CreateScale(0.20f) * Matrix::CreateTranslation(0.0f, 1.68f, 0.0f) * pRoot,
-        m_view, m_proj, pv.armorLight);
+	case 3:
+		// 頭上から振り下ろす縦斬り
+		// windup: 頭上高く持ち上げる（bladePitch=-1.5で刃が真上を向く）
+		windupPose = { Vector3(0.04f, 1.30f, -0.02f),  0.00f,  0.10f, 0.02f,  0.02f, -1.50f, 0.04f };
+		// active: 前方下へ叩きつける（bladePitch=+1.1で刃が前下を向く）
+		activePose = { Vector3(0.00f, 0.72f,  0.32f),  0.00f, -0.05f, 0.20f,  0.02f,  1.10f, 0.04f };
+		// follow: 振り切り
+		followPose = { Vector3(0.00f, 0.68f,  0.30f),  0.00f, -0.05f, 0.18f,  0.02f,  0.85f, 0.04f };
+		break;
 
-    // バイザー（発光スリット）
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.13f, 0.024f, 0.032f) * Matrix::CreateTranslation(0.0f, 1.695f, 0.198f) * pRoot,
-        m_view, m_proj, pv.emissiveColor);
+	case 1:
+	default:
+		// 右から左への横薙ぎ
+		// windup: 右肩後方に引いてため。bladeYawを負にして刃が右を向く
+		windupPose = { Vector3(0.34f, 0.94f, -0.06f),  0.16f, 0.02f, 0.02f, -1.05f, 0.50f,  0.22f };
+		// active: 左前方へ一気に振り抜く
+		activePose = { Vector3(-0.24f, 0.84f, 0.26f), -0.18f, 0.00f, 0.14f,  0.92f, 0.48f, -0.30f };
+		// follow: フォロースルー
+		followPose = { Vector3(-0.16f, 0.82f, 0.24f), -0.10f,-0.01f, 0.10f,  0.62f, 0.45f, -0.16f };
+		break;
+	}
 
-    // バイザー端キャップ
-    for (int s : { -1, 1 })
-    {
-        m_obstacleMesh->Draw(
-            Matrix::CreateScale(0.026f, 0.024f, 0.028f) *
-            Matrix::CreateTranslation(s * 0.072f, 1.695f, 0.192f) * pRoot,
-            m_view, m_proj, pv.emissiveColor);
-    }
+	const auto SampleGreatswordPose = [&](float progress) -> GreatswordPose
+	{
+		if (attackTotalSec <= 0.0f)
+		{
+			return guardPose;
+		}
 
-    // 頭頂リッジ
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.055f, 0.045f, 0.18f) * Matrix::CreateTranslation(0.0f, 1.88f, 0.0f) * pRoot,
-        m_view, m_proj, pv.accentColor);
+		const float windupEnd = Utility::MathEx::Clamp(tuning.comboAttackWindupSec / attackTotalSec, 0.0f, 1.0f);
+		const float activeEnd = Utility::MathEx::Clamp((tuning.comboAttackWindupSec + tuning.comboAttackActiveSec) / attackTotalSec, 0.0f, 1.0f);
+		const float followEnd = Utility::MathEx::Clamp((tuning.comboAttackWindupSec + tuning.comboAttackActiveSec + tuning.comboAttackFollowThroughSec) / attackTotalSec, 0.0f, 1.0f);
+		progress = Utility::MathEx::Clamp(progress, 0.0f, 1.0f);
 
-    // 胸甲
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.36f, 0.20f, 0.14f) * Matrix::CreateRotationX(attackBlend * 0.16f) *
-        Matrix::CreateTranslation(0.0f, 1.08f, 0.18f) * pRoot,
-        m_view, m_proj, pv.armorDark);
+		if (progress <= windupEnd)
+		{
+			const float localT = (windupEnd > 0.0f) ? (progress / windupEnd) : 1.0f;
+			return LerpPose(guardPose, windupPose, EaseInCubic(localT));
+		}
+		if (progress <= activeEnd)
+		{
+			const float denom = std::max(0.0001f, activeEnd - windupEnd);
+			return LerpPose(windupPose, activePose, BuildSwingEase((progress - windupEnd) / denom));
+		}
+		if (progress <= followEnd)
+		{
+			const float denom = std::max(0.0001f, followEnd - activeEnd);
+			return LerpPose(activePose, followPose, EaseOutCubic((progress - activeEnd) / denom));
+		}
 
-    // コアライン（発光）
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.09f, 0.14f, 0.032f) * Matrix::CreateTranslation(0.0f, 1.08f, 0.27f) * pRoot,
-        m_view, m_proj, pv.emissiveColor);
+		const float denom = std::max(0.0001f, 1.0f - followEnd);
+		return LerpPose(followPose, guardPose, EaseOutCubic((progress - followEnd) / denom));
+	};
 
-    // 肩甲（左右）
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.16f, 0.10f, 0.18f) * Matrix::CreateRotationZ(-0.24f) *
-        Matrix::CreateTranslation(-0.32f, 1.28f, 0.0f) * pRoot,
-        m_view, m_proj, pv.trimColor);
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.16f, 0.10f, 0.18f) * Matrix::CreateRotationZ(0.24f) *
-        Matrix::CreateTranslation(0.32f, 1.28f, 0.02f) * pRoot,
-        m_view, m_proj, pv.trimColor);
+	const auto SampleBladeRotation = [&](float progress) -> Matrix
+	{
+		const GreatswordPose pose = SampleGreatswordPose(progress);
+		return
+			Matrix::CreateRotationZ(pose.bladeRoll) *
+			Matrix::CreateRotationX(pose.bladePitch) *
+			Matrix::CreateRotationY(m_player.yaw + pose.rootYawOffset + pose.bladeYaw);
+	};
 
-    // 腰甲（左右）
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.10f, 0.18f, 0.08f) * Matrix::CreateRotationZ(-0.1f) *
-        Matrix::CreateTranslation(-0.18f, 0.64f, 0.07f) * pRoot,
-        m_view, m_proj, pv.armorDark);
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.10f, 0.18f, 0.08f) * Matrix::CreateRotationZ(0.1f) *
-        Matrix::CreateTranslation(0.18f, 0.64f, 0.07f) * pRoot,
-        m_view, m_proj, pv.armorDark);
+	const auto DrawLimb = [&](const Vector3& start, const Vector3& end, float radius, const Color& limbColor)
+	{
+		Vector3 dir = end - start;
+		const float length = dir.Length();
+		if (length <= 0.001f)
+		{
+			return;
+		}
+		dir /= length;
+		const float yaw = std::atan2(dir.x, dir.z);
+		const float pitch = -std::atan2(dir.y, std::sqrt(dir.x * dir.x + dir.z * dir.z));
+		const Vector3 center = start + dir * (length * 0.5f);
+		m_playerMesh->Draw(
+			Matrix::CreateScale(radius, length * 0.5f, radius) *
+			Matrix::CreateRotationX(pitch) *
+			Matrix::CreateRotationY(yaw) *
+			Matrix::CreateTranslation(center),
+			m_view, m_proj, limbColor);
+	};
 
-    // 脚（左右）
-    m_playerMesh->Draw(
-        Matrix::CreateScale(0.14f, 0.55f, 0.16f) * Matrix::CreateRotationX(legSwing) *
-        Matrix::CreateTranslation(-0.16f, 0.32f, 0.0f) * pRoot,
-        m_view, m_proj, pv.underColor);
-    m_playerMesh->Draw(
-        Matrix::CreateScale(0.14f, 0.55f, 0.16f) * Matrix::CreateRotationX(-legSwing) *
-        Matrix::CreateTranslation(0.16f, 0.32f, 0.0f) * pRoot,
-        m_view, m_proj, pv.underColor);
+	const bool attackInProgress = m_player.attackPhase != Action::PlayerAttackPhase::Idle;
+	const GreatswordPose currentPose = attackInProgress ? SampleGreatswordPose(attackBlend) : guardPose;
 
-    // 脛甲（左右）
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.10f, 0.22f, 0.08f) * Matrix::CreateTranslation(-0.16f, 0.16f, 0.13f) * pRoot,
-        m_view, m_proj, pv.armorDark);
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.10f, 0.22f, 0.08f) * Matrix::CreateTranslation(0.16f, 0.16f, 0.13f) * pRoot,
-        m_view, m_proj, pv.armorDark);
+	const SceneFx::PlayerVisualProfile pv = SceneFx::BuildPlayerVisualProfile(m_player, m_sceneTime);
+	const Vector3 forward(std::sin(m_player.yaw), 0.0f, std::cos(m_player.yaw));
 
-    // 腕（左右）
-    m_playerMesh->Draw(
-        Matrix::CreateScale(0.14f, 0.48f, 0.14f) *
-        Matrix::CreateRotationX(Lf(0.02f, 0.32f - attackBlend * 0.18f, carryBlend)) *
-        Matrix::CreateRotationZ(Lf(-0.10f + armPulse * 0.25f, -1.02f + comboSign * attackBlend * 0.10f, carryBlend)) *
-        Matrix::CreateTranslation(Lv(Vector3(-0.30f, 1.02f, -0.02f), Vector3(0.06f, 0.92f, -0.10f), carryBlend)) *
-        pRoot,
-        m_view, m_proj, pv.underColor);
-    m_playerMesh->Draw(
-        Matrix::CreateScale(0.14f, 0.50f, 0.14f) *
-        Matrix::CreateRotationX(Lf(0.58f, -0.24f - attackBlend * 0.82f, carryBlend)) *
-        Matrix::CreateRotationZ(Lf(0.08f + armPulse * 0.25f, 0.28f - armPulse + comboSign * attackBlend * 0.42f, carryBlend)) *
-        Matrix::CreateTranslation(Lv(Vector3(0.30f, 0.94f, -0.18f), Vector3(0.30f, 1.00f, 0.04f + attackBlend * 0.08f), carryBlend)) *
-        pRoot,
-        m_view, m_proj, pv.underColor);
+	DrawShadow(m_player.position, 0.56f, 0.82f, 0.18f);
 
-    // =========================================================================
-    // 剣（ロングソード）描画
-    // =========================================================================
-    // 振りのイーズ: 序盤ゆっくり→中盤一気に加速→終盤ゆっくり
-    // これにより「ため→鋭い振り→フォロースルー」の重さが生まれる
-    const float swingEase  = attackBlend < 0.5f
-        ? 4.0f * attackBlend * attackBlend * attackBlend              // 序盤: ease-in (ゆっくり)
-        : 1.0f - std::powf(-2.0f * attackBlend + 2.0f, 3.0f) * 0.5f;// 終盤: ease-out (フォロースルー)
-    const float swingYaw   = comboSign * (swingEase * 2.0f - 1.0f) * kWeaponSwingYawRad;
-    const float swingPitch = -0.48f + std::sinf(swingEase * DirectX::XM_PI) * (kWeaponSwingPitchRad * 1.05f);
-    // 待機: 剣を右肩前方に立てて構える（腰の後ろではなく正面構え）
-    const float cyaw   = Lf(-0.28f, swingYaw, carryBlend);
-    const float cpitch = Lf(-0.62f, swingPitch, carryBlend);  // 待機時は刃先を上に
-    const float croll  = Lf(-0.18f, -0.12f + comboSign * swingEase * 0.08f, carryBlend);
+	const Matrix pRoot =
+		Matrix::CreateRotationY(m_player.yaw + currentPose.rootYawOffset) *
+		Matrix::CreateTranslation(
+			m_player.position +
+			forward * currentPose.rootForward +
+			Vector3(0.0f, std::sinf(m_sceneTime * 4.4f) * 0.04f + currentPose.rootLift, 0.0f));
 
-    const Matrix bladeRot =
-        Matrix::CreateRotationZ(croll) *
-        Matrix::CreateRotationX(cpitch) *
-        Matrix::CreateRotationY(m_player.yaw + cyaw);
+	m_enemyMesh->Draw(
+		Matrix::CreateScale(0.46f, 0.64f, 0.44f) * Matrix::CreateRotationX(attackBlend * 0.10f) *
+		Matrix::CreateTranslation(0.0f, 1.0f, 0.08f) * pRoot,
+		m_view, m_proj, pv.armorLight);
+	m_enemyMesh->Draw(
+		Matrix::CreateScale(0.20f) * Matrix::CreateTranslation(0.0f, 1.70f, 0.0f) * pRoot,
+		m_view, m_proj, pv.armorLight);
+	m_obstacleMesh->Draw(
+		Matrix::CreateScale(0.13f, 0.024f, 0.032f) * Matrix::CreateTranslation(0.0f, 1.715f, 0.198f) * pRoot,
+		m_view, m_proj, pv.emissiveColor);
+	m_obstacleMesh->Draw(
+		Matrix::CreateScale(0.055f, 0.045f, 0.18f) * Matrix::CreateTranslation(0.0f, 1.89f, 0.0f) * pRoot,
+		m_view, m_proj, pv.accentColor);
+	m_obstacleMesh->Draw(
+		Matrix::CreateScale(0.36f, 0.20f, 0.14f) * Matrix::CreateTranslation(0.0f, 1.08f, 0.18f) * pRoot,
+		m_view, m_proj, pv.armorDark);
+	for (int side : { -1, 1 })
+	{
+		m_obstacleMesh->Draw(
+			Matrix::CreateScale(0.18f, 0.10f, 0.18f) * Matrix::CreateRotationZ(0.20f * static_cast<float>(side)) *
+			Matrix::CreateTranslation(0.32f * static_cast<float>(side), 1.28f, 0.02f) * pRoot,
+			m_view, m_proj, pv.trimColor);
+		m_obstacleMesh->Draw(
+			Matrix::CreateScale(0.10f, 0.18f, 0.08f) * Matrix::CreateRotationZ(0.10f * static_cast<float>(side)) *
+			Matrix::CreateTranslation(0.18f * static_cast<float>(side), 0.64f, 0.07f) * pRoot,
+			m_view, m_proj, pv.armorDark);
+		m_playerMesh->Draw(
+			Matrix::CreateScale(0.14f, 0.55f, 0.16f) * Matrix::CreateRotationX((side < 0) ? legSwing : -legSwing) *
+			Matrix::CreateTranslation(0.16f * static_cast<float>(side), 0.32f, 0.0f) * pRoot,
+			m_view, m_proj, pv.underColor);
+		m_obstacleMesh->Draw(
+			Matrix::CreateScale(0.10f, 0.22f, 0.08f) * Matrix::CreateTranslation(0.16f * static_cast<float>(side), 0.16f, 0.13f) * pRoot,
+			m_view, m_proj, pv.armorDark);
+	}
 
-    Vector3 bDir = Vector3::TransformNormal(Vector3::UnitY, bladeRot); bDir.Normalize();
-    Vector3 bRight = Vector3::TransformNormal(Vector3::UnitX, bladeRot); bRight.Normalize();
+	const Matrix bladeRot = SampleBladeRotation(attackInProgress ? attackBlend : 0.0f);
+	Vector3 bladeDir = SafeNormalize(Vector3::TransformNormal(Vector3::UnitY, bladeRot), Vector3::UnitY);
+	Vector3 bladeRight = SafeNormalize(Vector3::TransformNormal(Vector3::UnitX, bladeRot), Vector3::UnitX);
+	const Vector3 rearGripWorld = Vector3::Transform(currentPose.gripLocal, pRoot);
+	const Vector3 frontGripWorld = rearGripWorld + bladeDir * 0.18f;
+	const Vector3 guardCenter = rearGripWorld + bladeDir * 0.26f;
+	const Vector3 weaponCenter = rearGripWorld + bladeDir * 0.90f;
+	const Vector3 leftShoulderWorld = Vector3::Transform(Vector3(-0.24f, 1.20f, 0.04f), pRoot);
+	const Vector3 rightShoulderWorld = Vector3::Transform(Vector3(0.24f, 1.20f, 0.04f), pRoot);
 
-    // 待機構え: 右腰前方でグリップ、刃先を斜め上前方に向ける
-    // 振り時: 右肩から前方へ一気に振り抜く
-    const Vector3 gripAnchor = Vector3::Transform(
-        Lv(Vector3(0.28f, 0.88f, 0.08f), Vector3(0.24f, 0.82f, 0.14f + attackBlend * 0.04f), carryBlend),
-        pRoot);
-    const Vector3 wCenter =
-        gripAnchor +
-        bDir    * Lf(0.44f,  0.52f + swingEase * 0.06f, carryBlend) +
-        forward * Lf( 0.10f, -0.04f + swingEase * 0.10f, carryBlend) +
-        right   * Lf( 0.08f,  0.04f + comboSign * 0.04f, carryBlend);
+	DrawLimb(leftShoulderWorld, frontGripWorld, 0.070f, pv.underColor);
+	DrawLimb(rightShoulderWorld, rearGripWorld, 0.074f, pv.underColor);
+	m_enemyMesh->Draw(Matrix::CreateScale(0.055f) * Matrix::CreateTranslation(frontGripWorld), m_view, m_proj, pv.trimColor);
+	m_enemyMesh->Draw(Matrix::CreateScale(0.060f) * Matrix::CreateTranslation(rearGripWorld), m_view, m_proj, pv.trimColor);
 
-    // 刃身メイン（薄い板: 0.15 x 1.32 x 0.018）
-    m_weaponMesh->Draw(bladeRot * Matrix::CreateTranslation(wCenter), m_view, m_proj, kBladeColor);
+	m_weaponMesh->Draw(bladeRot * Matrix::CreateTranslation(weaponCenter), m_view, m_proj, kBladeColor);
+	m_obstacleMesh->Draw(Matrix::CreateScale(0.008f, 1.52f, 0.020f) * bladeRot * Matrix::CreateTranslation(weaponCenter + bladeRight * 0.072f), m_view, m_proj, kBladeEdgeColor);
+	m_obstacleMesh->Draw(Matrix::CreateScale(0.008f, 1.52f, 0.020f) * bladeRot * Matrix::CreateTranslation(weaponCenter - bladeRight * 0.072f), m_view, m_proj, kBladeEdgeColor);
+	m_obstacleMesh->Draw(Matrix::CreateScale(0.022f, 1.10f, 0.022f) * bladeRot * Matrix::CreateTranslation(rearGripWorld + bladeDir * 0.98f), m_view, m_proj, kBladeFullerColor);
+	m_obstacleMesh->Draw(Matrix::CreateScale(0.10f, 0.18f, 0.014f) * bladeRot * Matrix::CreateTranslation(rearGripWorld + bladeDir * 1.42f), m_view, m_proj, kBladeFlatColor);
+	m_obstacleMesh->Draw(Matrix::CreateScale(0.044f, 0.16f, 0.010f) * bladeRot * Matrix::CreateTranslation(rearGripWorld + bladeDir * 1.58f), m_view, m_proj, kBladeColor);
+	m_obstacleMesh->Draw(Matrix::CreateScale(0.014f, 0.10f, 0.008f) * bladeRot * Matrix::CreateTranslation(rearGripWorld + bladeDir * 1.70f), m_view, m_proj, kBladeEdgeColor);
+	m_obstacleMesh->Draw(Matrix::CreateScale(0.20f, 0.036f, 0.10f) * Matrix::CreateRotationZ(0.10f) * bladeRot * Matrix::CreateTranslation(guardCenter + bladeRight * 0.12f), m_view, m_proj, kGuardColor);
+	m_obstacleMesh->Draw(Matrix::CreateScale(0.20f, 0.036f, 0.10f) * Matrix::CreateRotationZ(-0.10f) * bladeRot * Matrix::CreateTranslation(guardCenter - bladeRight * 0.12f), m_view, m_proj, kGuardColor);
+	m_obstacleMesh->Draw(Matrix::CreateScale(0.34f, 0.016f, 0.016f) * bladeRot * Matrix::CreateTranslation(guardCenter), m_view, m_proj, kGuardTrimColor);
+	m_obstacleMesh->Draw(Matrix::CreateScale(0.046f, 0.34f, 0.060f) * bladeRot * Matrix::CreateTranslation(rearGripWorld + bladeDir * 0.09f), m_view, m_proj, kGripColor);
+	for (int wrapIndex = 0; wrapIndex < 5; ++wrapIndex)
+	{
+		const float offset = -0.12f + static_cast<float>(wrapIndex) * 0.08f;
+		m_obstacleMesh->Draw(
+			Matrix::CreateScale(0.054f, 0.016f, 0.066f) * bladeRot * Matrix::CreateTranslation(rearGripWorld + bladeDir * (0.09f - offset)),
+			m_view, m_proj, kGripWrapColor);
+	}
+	m_obstacleMesh->Draw(Matrix::CreateScale(0.082f, 0.074f, 0.082f) * bladeRot * Matrix::CreateTranslation(rearGripWorld - bladeDir * 0.10f), m_view, m_proj, kPommelColor);
+	m_obstacleMesh->Draw(Matrix::CreateScale(0.054f, 0.032f, 0.054f) * bladeRot * Matrix::CreateTranslation(rearGripWorld - bladeDir * 0.16f), m_view, m_proj, kGuardTrimColor);
 
-    // 刃縁ハイライト（左右エッジを明るく）
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.007f, 1.28f, 0.022f) * bladeRot * Matrix::CreateTranslation(wCenter + bRight * 0.075f),
-        m_view, m_proj, kBladeEdgeColor);
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.007f, 1.28f, 0.022f) * bladeRot * Matrix::CreateTranslation(wCenter - bRight * 0.075f),
-        m_view, m_proj, kBladeEdgeColor);
+	m_player.swingTrailBase = rearGripWorld + bladeDir * 1.00f;
+	m_player.swingTrailTip = rearGripWorld + bladeDir * 1.68f;
+	if (m_player.swingTrailActive && attackInProgress)
+	{
+		Vector3 previousMid = m_player.swingTrailBase;
+		Vector3 previousTip = m_player.swingTrailTip;
+		for (int sampleIndex = 1; sampleIndex < 8; ++sampleIndex)
+		{
+			const float sampleAlpha = 1.0f - static_cast<float>(sampleIndex) / 8.0f;
+			const float sampleT = Utility::MathEx::Clamp(attackBlend - sampleAlpha * 0.12f, 0.0f, 1.0f);
+			const GreatswordPose samplePose = SampleGreatswordPose(sampleT);
+			const Matrix sampleRoot =
+				Matrix::CreateRotationY(m_player.yaw + samplePose.rootYawOffset) *
+				Matrix::CreateTranslation(
+					m_player.position +
+					forward * samplePose.rootForward +
+					Vector3(0.0f, std::sinf(m_sceneTime * 4.4f) * 0.04f + samplePose.rootLift, 0.0f));
+			const Matrix sampleRot = SampleBladeRotation(sampleT);
+			const Vector3 sampleDir = SafeNormalize(Vector3::TransformNormal(Vector3::UnitY, sampleRot), bladeDir);
+			const Vector3 sampleGrip = Vector3::Transform(samplePose.gripLocal, sampleRoot);
+			const Vector3 midPos = sampleGrip + sampleDir * 1.00f;
+			const Vector3 tipPos = sampleGrip + sampleDir * 1.68f;
+			const Vector3 currentCenter = (midPos + tipPos) * 0.5f;
+			const Vector3 previousCenter = (previousMid + previousTip) * 0.5f;
+			const Vector3 span = tipPos - midPos;
+			const Vector3 segment = currentCenter - previousCenter;
+			const float segmentLength = segment.Length();
+			const float spanLength = span.Length();
+			if (segmentLength > 0.04f && spanLength > 0.10f)
+			{
+				const Vector3 segmentCenter = previousCenter + segment * 0.5f;
+				const float segmentYaw = std::atan2(segment.x, segment.z);
+				const float segmentPitch = -std::atan2(segment.y, std::sqrt(segment.x * segment.x + segment.z * segment.z));
+				m_effectTrailMesh->Draw(
+					Matrix::CreateScale(spanLength * 0.52f, 0.020f, segmentLength) *
+					Matrix::CreateRotationZ(0.18f) *
+					Matrix::CreateRotationX(segmentPitch) *
+					Matrix::CreateRotationY(segmentYaw) *
+					Matrix::CreateTranslation(segmentCenter),
+					m_view, m_proj,
+					Color(kTrailCoreColor.R(), kTrailCoreColor.G(), kTrailCoreColor.B(), 0.12f + sampleAlpha * 0.20f));
+				m_effectTrailMesh->Draw(
+					Matrix::CreateScale(spanLength * 0.68f, 0.010f, segmentLength * 0.92f) *
+					Matrix::CreateRotationZ(0.18f) *
+					Matrix::CreateRotationX(segmentPitch) *
+					Matrix::CreateRotationY(segmentYaw) *
+					Matrix::CreateTranslation(segmentCenter),
+					m_view, m_proj,
+					Color(kTrailRimColor.R(), kTrailRimColor.G(), kTrailRimColor.B(), 0.10f + sampleAlpha * 0.16f));
+			}
+			previousMid = midPos;
+			previousTip = tipPos;
+		}
+	}
 
-    // 血溝（フラー: 刃身中央の縦溝）
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.020f, 0.86f, 0.024f) * bladeRot * Matrix::CreateTranslation(wCenter - bDir * 0.12f),
-        m_view, m_proj, kBladeFullerColor);
+	if (m_player.comboLevel >= 3 && attackInProgress)
+	{
+		m_weaponMesh->Draw(
+			Matrix::CreateScale(1.18f, 1.0f, 1.6f) * bladeRot * Matrix::CreateTranslation(weaponCenter),
+			m_view, m_proj,
+			Color(pv.emissiveColor.R(), pv.emissiveColor.G(), pv.emissiveColor.B(), 0.18f + attackBlend * 0.22f));
+	}
 
-    // 刃先（3段テーパーで尖らせる）
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.10f, 0.13f, 0.016f) * bladeRot * Matrix::CreateTranslation(wCenter + bDir * 0.70f),
-        m_view, m_proj, kBladeFlatColor);
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.046f, 0.09f, 0.012f) * bladeRot * Matrix::CreateTranslation(wCenter + bDir * 0.82f),
-        m_view, m_proj, kBladeColor);
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.014f, 0.065f, 0.008f) * bladeRot * Matrix::CreateTranslation(wCenter + bDir * 0.92f),
-        m_view, m_proj, kBladeEdgeColor);
+	const Matrix invView = m_view.Invert();
+	const Vector3 camPos(invView._41, invView._42, invView._43);
 
-    // 鍔（クロスガード）: 横に広い板
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.42f, 0.038f, 0.10f) * bladeRot * Matrix::CreateTranslation(gripAnchor + bDir * 0.03f),
-        m_view, m_proj, kGuardColor);
-    // 鍔トリム（上面ライン）
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.38f, 0.018f, 0.016f) * bladeRot * Matrix::CreateTranslation(gripAnchor + bDir * 0.03f),
-        m_view, m_proj, kGuardTrimColor);
-    // 鍔端キャップ（左右）
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.030f, 0.054f, 0.11f) * bladeRot * Matrix::CreateTranslation(gripAnchor + bDir * 0.03f + bRight * 0.208f),
-        m_view, m_proj, kGuardTrimColor);
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.030f, 0.054f, 0.11f) * bladeRot * Matrix::CreateTranslation(gripAnchor + bDir * 0.03f - bRight * 0.208f),
-        m_view, m_proj, kGuardTrimColor);
+	for (size_t i = 0; i < m_enemies.size(); ++i)
+	{
+		const Action::EnemyState& en = m_enemies[i];
+		if (en.state == Action::EnemyStateType::Dead)
+		{
+			continue;
+		}
 
-    // 柄（グリップ）
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.050f, 0.27f, 0.064f) * bladeRot * Matrix::CreateTranslation(gripAnchor - bDir * 0.17f),
-        m_view, m_proj, kGripColor);
-    // 柄巻きリング（3本）
-    for (int ri = 0; ri < 3; ++ri)
-    {
-        const float ro = -0.08f + static_cast<float>(ri) * 0.08f;
-        m_obstacleMesh->Draw(
-            Matrix::CreateScale(0.058f, 0.018f, 0.072f) * bladeRot *
-            Matrix::CreateTranslation(gripAnchor - bDir * (0.17f - ro)),
-            m_view, m_proj, kGripWrapColor);
-    }
+		const SceneFx::EnemyVisualProfile ev = SceneFx::BuildEnemyVisualProfile(en, m_gameState.dangerLevel, i, m_sceneTime);
+		const float breath = std::sinf(m_sceneTime * kEnemyBreathSpeed + static_cast<float>(i) * 0.78f) * 0.07f;
+		const float spawnBlend = 1.0f - Utility::MathEx::Clamp(en.stateTimer / kEnemySpawnDurationSec, 0.0f, 1.0f);
+		const float eScale = (en.state == Action::EnemyStateType::Idle && en.stateTimer > 0.0f) ? (0.35f + spawnBlend * 0.65f) : 1.0f;
+		const float hitBlend = Utility::MathEx::Clamp(en.hitReactTimer / 0.24f, 0.0f, 1.0f);
+		const float attackBlendEnemy = (en.state == Action::EnemyStateType::Attack)
+			? (1.0f - Utility::MathEx::Clamp(en.stateTimer / kEnemyAttackWindupVisualSec, 0.0f, 1.0f))
+			: 0.0f;
 
-    // 柄頭（ポンメル）
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.080f, 0.070f, 0.080f) * bladeRot * Matrix::CreateTranslation(gripAnchor - bDir * 0.34f),
-        m_view, m_proj, kPommelColor);
-    m_obstacleMesh->Draw(
-        Matrix::CreateScale(0.054f, 0.030f, 0.054f) * bladeRot * Matrix::CreateTranslation(gripAnchor - bDir * 0.39f),
-        m_view, m_proj, kGuardTrimColor);
+		Vector3 toCam = en.position - camPos;
+		toCam.y = 0.0f;
+		const float distSq = toCam.LengthSquared();
+		const bool midLod = distSq >= 20.0f * 20.0f;
+		const bool lowLod = distSq >= 28.0f * 28.0f;
 
-    // コンボLv3: 刃身グロー
-    if (m_player.comboLevel >= 3 && attackBlend > 0.05f)
-    {
-        m_weaponMesh->Draw(
-            Matrix::CreateScale(1.4f, 1.0f, 2.0f) * bladeRot * Matrix::CreateTranslation(wCenter),
-            m_view, m_proj,
-            Color(pv.emissiveColor.R(), pv.emissiveColor.G(), pv.emissiveColor.B(), attackBlend * 0.40f));
-    }
+		DrawShadow(en.position, 0.42f, 0.60f, lowLod ? 0.07f : 0.11f);
 
-    // =========================================================================
-    // 敵描画
-    // =========================================================================
-    const Matrix invView = m_view.Invert();
-    const Vector3 camPos(invView._41, invView._42, invView._43);
+		Vector3 knockbackDir = en.knockbackVelocity;
+		knockbackDir.y = 0.0f;
+		if (knockbackDir.LengthSquared() > 0.0001f)
+		{
+			knockbackDir.Normalize();
+		}
 
-    for (size_t i = 0; i < m_enemies.size(); ++i)
-    {
-        const Action::EnemyState& en = m_enemies[i];
-        if (en.state == Action::EnemyStateType::Dead) continue;
+		const Matrix eRoot =
+			Matrix::CreateScale(eScale * (1.0f + hitBlend * 0.10f), eScale * (1.0f - hitBlend * 0.15f), eScale * (1.0f + hitBlend * 0.10f)) *
+			Matrix::CreateRotationY(en.yaw + std::sinf(en.hitReactTimer * 28.0f + static_cast<float>(i)) * hitBlend * 0.34f + attackBlendEnemy * 0.08f) *
+			Matrix::CreateTranslation(en.position + knockbackDir * hitBlend * 0.34f + Vector3(0.0f, breath + hitBlend * 0.07f, 0.0f));
 
-        const SceneFx::EnemyVisualProfile ev =
-            SceneFx::BuildEnemyVisualProfile(en, m_gameState.dangerLevel, i, m_sceneTime);
+		m_enemyMesh->Draw(
+			Matrix::CreateScale(0.44f, 0.62f, 0.44f) * Matrix::CreateRotationX(attackBlendEnemy * 0.36f) *
+			Matrix::CreateTranslation(0.0f, 1.0f, attackBlendEnemy * 0.15f) * eRoot,
+			m_view, m_proj, ev.armorLight);
 
-        const float breath  = std::sinf(m_sceneTime * kEnemyBreathSpeed + static_cast<float>(i) * 0.78f) * 0.07f;
-        const float idleB   = 1.0f - Utility::MathEx::Clamp(en.stateTimer / kEnemySpawnDurationSec, 0.0f, 1.0f);
-        const float eScale  = (en.state == Action::EnemyStateType::Idle && en.stateTimer > 0.0f)
-                            ? (0.35f + idleB * 0.65f) : 1.0f;
-        const float hitB    = (en.state == Action::EnemyStateType::Chase && en.stateTimer > 0.0f)
-                            ? Utility::MathEx::Clamp(en.stateTimer / 0.18f, 0.0f, 1.0f) : 0.0f;
-        const float retLean = (en.state == Action::EnemyStateType::Return)
-                            ? std::sinf(m_sceneTime * 7.0f + static_cast<float>(i) * 0.6f) * 0.12f : 0.0f;
-        const float stagLean = hitB * std::sinf(en.stateTimer * 20.0f + static_cast<float>(i) * 0.6f) * 0.24f + retLean;
-        const Vector3 eFwd(-std::sin(en.yaw), 0.0f, -std::cos(en.yaw)); // 後ろ方向
-        const float eAtk = (en.state == Action::EnemyStateType::Attack)
-                         ? (1.0f - Utility::MathEx::Clamp(en.stateTimer / kEnemyAttackWindupVisualSec, 0.0f, 1.0f)) : 0.0f;
+		if (!lowLod)
+		{
+			m_enemyMesh->Draw(
+				Matrix::CreateScale(0.20f) * Matrix::CreateTranslation(0.0f, 1.68f, 0.0f) * eRoot,
+				m_view, m_proj, ev.armorLight);
+			m_obstacleMesh->Draw(
+				Matrix::CreateScale(0.09f, 0.018f, 0.028f) * Matrix::CreateTranslation(0.0f, 1.695f, 0.196f) * eRoot,
+				m_view, m_proj, ev.emissiveColor);
+		}
 
-        Vector3 toCam = en.position - camPos; toCam.y = 0.0f;
-        const float distSq = toCam.LengthSquared();
-        const bool midLod  = distSq >= (20.0f * 20.0f);
-        const bool lowLod  = distSq >= (28.0f * 28.0f);
+		if (!midLod)
+		{
+			const bool moving =
+				en.state == Action::EnemyStateType::Wander ||
+				en.state == Action::EnemyStateType::Chase ||
+				en.state == Action::EnemyStateType::Return;
+			const float locomotion = moving ? 1.0f : 0.0f;
+			const float eArmPulse = std::sinf(m_sceneTime * (4.6f + locomotion * 2.2f) + static_cast<float>(i)) * (0.12f + locomotion * 0.22f);
+			const float eLegSwing = std::sinf(m_sceneTime * (3.0f + locomotion * 4.2f) + static_cast<float>(i) * 0.9f) * (0.08f + locomotion * 0.24f);
 
-        DrawShadow(en.position, 0.42f, 0.60f, lowLod ? 0.07f : 0.11f);
+			m_obstacleMesh->Draw(Matrix::CreateScale(0.34f, 0.18f, 0.14f) * Matrix::CreateRotationX(attackBlendEnemy * 0.18f) * Matrix::CreateTranslation(0.0f, 1.08f, 0.18f) * eRoot, m_view, m_proj, ev.armorDark);
+			m_obstacleMesh->Draw(Matrix::CreateScale(0.16f, 0.10f, 0.18f) * Matrix::CreateRotationZ(-0.24f) * Matrix::CreateTranslation(-0.32f, 1.27f, 0.0f) * eRoot, m_view, m_proj, ev.trimColor);
+			m_obstacleMesh->Draw(Matrix::CreateScale(0.16f, 0.10f, 0.18f) * Matrix::CreateRotationZ(0.24f) * Matrix::CreateTranslation(0.32f, 1.27f, 0.02f) * eRoot, m_view, m_proj, ev.trimColor);
+			m_playerMesh->Draw(Matrix::CreateScale(0.14f, 0.48f, 0.14f) * Matrix::CreateRotationX(0.10f) * Matrix::CreateRotationZ(-0.04f + eArmPulse * 0.65f - attackBlendEnemy * 0.30f) * Matrix::CreateTranslation(-0.30f, 1.02f, -0.06f) * eRoot, m_view, m_proj, ev.underColor);
+			m_playerMesh->Draw(Matrix::CreateScale(0.14f, 0.48f, 0.14f) * Matrix::CreateRotationX(0.54f - attackBlendEnemy * 0.80f) * Matrix::CreateRotationZ(0.02f - eArmPulse * 0.55f + attackBlendEnemy * 0.28f) * Matrix::CreateTranslation(0.24f, 1.0f, -0.10f + attackBlendEnemy * 0.20f) * eRoot, m_view, m_proj, ev.underColor);
+			m_playerMesh->Draw(Matrix::CreateScale(0.14f, 0.55f, 0.16f) * Matrix::CreateRotationX(eLegSwing) * Matrix::CreateTranslation(-0.16f, 0.32f, 0.0f) * eRoot, m_view, m_proj, ev.underColor);
+			m_playerMesh->Draw(Matrix::CreateScale(0.14f, 0.55f, 0.16f) * Matrix::CreateRotationX(-eLegSwing) * Matrix::CreateTranslation(0.16f, 0.32f, 0.0f) * eRoot, m_view, m_proj, ev.underColor);
 
-        const Matrix eRoot =
-            Matrix::CreateScale(eScale * (1.0f + hitB * 0.10f), eScale * (1.0f - hitB * 0.15f), eScale * (1.0f + hitB * 0.10f)) *
-            Matrix::CreateRotationY(en.yaw + stagLean + eAtk * 0.08f) *
-            Matrix::CreateTranslation(en.position + eFwd * hitB * 0.26f + Vector3(0.0f, breath + hitB * 0.07f, 0.0f));
+			const Matrix enemyBladeRot =
+				Matrix::CreateRotationY(-0.44f + attackBlendEnemy * 0.44f) *
+				Matrix::CreateRotationX(0.84f - attackBlendEnemy * 1.20f) *
+				Matrix::CreateRotationY(en.yaw);
+			Vector3 enemyBladeDir = Vector3::TransformNormal(Vector3::UnitY, enemyBladeRot);
+			Vector3 enemyBladeRight = Vector3::TransformNormal(Vector3::UnitX, enemyBladeRot);
+			enemyBladeDir.Normalize();
+			enemyBladeRight.Normalize();
+			const Vector3 enemyBladePos = Vector3::Transform(Vector3(0.22f, 0.82f, -0.10f + attackBlendEnemy * 0.28f), eRoot);
 
-        // 胴体
-        m_enemyMesh->Draw(
-            Matrix::CreateScale(0.44f, 0.62f, 0.44f) * Matrix::CreateRotationX(eAtk * 0.36f) *
-            Matrix::CreateTranslation(0.0f, 1.0f, eAtk * 0.15f) * eRoot,
-            m_view, m_proj, ev.armorLight);
+			m_obstacleMesh->Draw(Matrix::CreateScale(0.11f, 0.58f, 0.014f) * enemyBladeRot * Matrix::CreateTranslation(enemyBladePos), m_view, m_proj, ev.weaponColor);
+			m_obstacleMesh->Draw(Matrix::CreateScale(0.007f, 0.56f, 0.017f) * enemyBladeRot * Matrix::CreateTranslation(enemyBladePos + enemyBladeRight * 0.055f), m_view, m_proj, kBladeEdgeColor);
+			m_obstacleMesh->Draw(Matrix::CreateScale(0.007f, 0.56f, 0.017f) * enemyBladeRot * Matrix::CreateTranslation(enemyBladePos - enemyBladeRight * 0.055f), m_view, m_proj, kBladeEdgeColor);
+			m_obstacleMesh->Draw(Matrix::CreateScale(0.26f, 0.028f, 0.075f) * enemyBladeRot * Matrix::CreateTranslation(enemyBladePos - enemyBladeDir * 0.30f), m_view, m_proj, ev.trimColor);
+			m_obstacleMesh->Draw(Matrix::CreateScale(0.040f, 0.18f, 0.052f) * enemyBladeRot * Matrix::CreateTranslation(enemyBladePos - enemyBladeDir * 0.42f), m_view, m_proj, kGripColor);
+		}
 
-        // 頭部 + 目
-        if (!lowLod)
-        {
-            m_enemyMesh->Draw(
-                Matrix::CreateScale(0.20f) * Matrix::CreateTranslation(0.0f, 1.68f, 0.0f) * eRoot,
-                m_view, m_proj, ev.armorLight);
-            m_obstacleMesh->Draw(
-                Matrix::CreateScale(0.09f, 0.018f, 0.028f) * Matrix::CreateTranslation(0.0f, 1.695f, 0.196f) * eRoot,
-                m_view, m_proj, ev.emissiveColor);
-        }
+		if (!lowLod && hitBlend > 0.01f)
+		{
+			m_obstacleMesh->Draw(
+				Matrix::CreateScale(0.54f + hitBlend * 0.14f, 0.028f, 0.12f) *
+				Matrix::CreateRotationZ(0.78f) *
+				Matrix::CreateRotationY(en.yaw + 0.12f) *
+				Matrix::CreateTranslation(en.position + Vector3(0.0f, 1.04f + hitBlend * 0.04f, 0.0f)),
+				m_view, m_proj,
+				Color(0.26f, 0.02f, 0.03f, 0.24f + hitBlend * 0.34f));
+		}
 
-        if (!midLod)
-        {
-            // 胸甲・肩甲
-            m_obstacleMesh->Draw(
-                Matrix::CreateScale(0.34f, 0.18f, 0.14f) * Matrix::CreateRotationX(eAtk * 0.18f) *
-                Matrix::CreateTranslation(0.0f, 1.08f, 0.18f) * eRoot,
-                m_view, m_proj, ev.armorDark);
-            m_obstacleMesh->Draw(
-                Matrix::CreateScale(0.16f, 0.10f, 0.18f) * Matrix::CreateRotationZ(-0.24f) *
-                Matrix::CreateTranslation(-0.32f, 1.27f, 0.0f) * eRoot,
-                m_view, m_proj, ev.trimColor);
-            m_obstacleMesh->Draw(
-                Matrix::CreateScale(0.16f, 0.10f, 0.18f) * Matrix::CreateRotationZ(0.24f) *
-                Matrix::CreateTranslation(0.32f, 1.27f, 0.02f) * eRoot,
-                m_view, m_proj, ev.trimColor);
+		if (!lowLod)
+		{
+			const float hpRatio = Utility::MathEx::Clamp(en.hp / std::max(1.0f, en.maxHp), 0.0f, 1.0f);
+			const Vector3 hpAnchor = en.position + Vector3(0.0f, 2.08f, 0.0f);
+			Vector3 hpToCam = camPos - hpAnchor;
+			hpToCam.y = 0.0f;
+			if (hpToCam.LengthSquared() < 0.0001f)
+			{
+				hpToCam = Vector3::UnitZ;
+			}
+			else
+			{
+				hpToCam.Normalize();
+			}
+			const float hpYaw = std::atan2(hpToCam.x, hpToCam.z);
 
-            // 腕・脚アニメ
-            const bool mov  = en.state == Action::EnemyStateType::Wander
-                           || en.state == Action::EnemyStateType::Chase
-                           || en.state == Action::EnemyStateType::Return;
-            const float loco   = mov ? 1.0f : 0.0f;
-            const float eArmP  = std::sinf(m_sceneTime * (4.6f + loco * 2.2f) + static_cast<float>(i)) * (0.12f + loco * 0.22f);
-            const float eLegS  = std::sinf(m_sceneTime * (3.0f + loco * 4.2f) + static_cast<float>(i) * 0.9f) * (0.08f + loco * 0.24f);
-            const float flankB = (en.archetype == Action::EnemyArchetype::BladeFlank) ? 0.16f : 0.0f;
+			m_obstacleMesh->Draw(
+				Matrix::CreateScale(0.84f, 0.05f, 0.10f) * Matrix::CreateRotationY(hpYaw) * Matrix::CreateTranslation(hpAnchor),
+				m_view, m_proj, Color(0.08f, 0.08f, 0.10f, 0.92f));
+			m_obstacleMesh->Draw(
+				Matrix::CreateScale(0.82f * hpRatio, 0.036f, 0.08f) *
+				Matrix::CreateTranslation((hpRatio - 1.0f) * 0.41f, 0.0f, 0.0f) *
+				Matrix::CreateRotationY(hpYaw) *
+				Matrix::CreateTranslation(hpAnchor + Vector3(0.0f, 0.0f, -0.002f)),
+				m_view, m_proj,
+				Color(0.24f + (1.0f - hpRatio) * 0.72f, 0.86f * hpRatio + 0.16f, 0.20f, 0.95f));
+		}
 
-            m_playerMesh->Draw(
-                Matrix::CreateScale(0.14f, 0.48f, 0.14f) *
-                Matrix::CreateRotationX(Lf(0.08f + loco * 0.08f, 0.10f + flankB, eAtk)) *
-                Matrix::CreateRotationZ(Lf(-0.04f + eArmP * 0.65f, -0.34f - flankB + eArmP * 1.1f, eAtk)) *
-                Matrix::CreateTranslation(Lv(Vector3(-0.30f, 1.02f, -0.06f), Vector3(-0.4f, 1.06f, 0.0f), eAtk)) *
-                eRoot, m_view, m_proj, ev.underColor);
-            m_playerMesh->Draw(
-                Matrix::CreateScale(0.14f, 0.48f, 0.14f) *
-                Matrix::CreateRotationX(Lf(0.54f - loco * 0.06f, -0.18f - eAtk * 0.9f, eAtk)) *
-                Matrix::CreateRotationZ(Lf(0.02f - eArmP * 0.55f, 0.30f - eArmP * 1.05f, eAtk)) *
-                Matrix::CreateTranslation(Lv(Vector3(0.24f, 1.0f, -0.10f), Vector3(0.4f, 1.06f, eAtk * 0.2f), eAtk)) *
-                eRoot, m_view, m_proj, ev.underColor);
+		if (m_showPathDebug && !lowLod && !en.path.empty())
+		{
+			for (size_t pathIndex = en.pathCursor; pathIndex < en.path.size(); ++pathIndex)
+			{
+				const Vector3 point = m_grid.GridToWorld(en.path[pathIndex], 0.05f);
+				m_debugCellMesh->Draw(
+					Matrix::CreateScale(0.2f, 0.05f, 0.2f) * Matrix::CreateTranslation(point),
+					m_view, m_proj, DirectX::Colors::Orange);
+			}
+		}
+	}
 
-            m_playerMesh->Draw(
-                Matrix::CreateScale(0.14f, 0.55f, 0.16f) * Matrix::CreateRotationX(eLegS) *
-                Matrix::CreateTranslation(-0.16f, 0.32f, 0.0f) * eRoot,
-                m_view, m_proj, ev.underColor);
-            m_playerMesh->Draw(
-                Matrix::CreateScale(0.14f, 0.55f, 0.16f) * Matrix::CreateRotationX(-eLegS) *
-                Matrix::CreateTranslation(0.16f, 0.32f, 0.0f) * eRoot,
-                m_view, m_proj, ev.underColor);
-
-            // 敵の武器（薄い刃身で描画）
-            const float ebp   = Lf(0.84f, -0.4f - eAtk * 0.8f, eAtk);
-            const float eby   = Lf(-0.44f, 0.0f, eAtk);
-            const Vector3 ebo = Lv(Vector3(0.22f, 0.82f, -0.10f), Vector3(0.58f, 0.96f, 0.18f + eAtk * 0.18f), eAtk);
-
-            const Matrix eBRot =
-                Matrix::CreateRotationY(eby) *
-                Matrix::CreateRotationX(ebp) *
-                Matrix::CreateRotationY(en.yaw);
-            Vector3 ebDir = Vector3::TransformNormal(Vector3::UnitY, eBRot); ebDir.Normalize();
-            Vector3 ebRight = Vector3::TransformNormal(Vector3::UnitX, eBRot); ebRight.Normalize();
-            const Vector3 ebPos = Vector3::Transform(ebo, eRoot);
-
-            // 刃身
-            m_obstacleMesh->Draw(
-                Matrix::CreateScale(0.11f, 0.58f, 0.014f) * eBRot * Matrix::CreateTranslation(ebPos),
-                m_view, m_proj, ev.weaponColor);
-            // 刃縁
-            m_obstacleMesh->Draw(
-                Matrix::CreateScale(0.007f, 0.56f, 0.017f) * eBRot * Matrix::CreateTranslation(ebPos + ebRight * 0.055f),
-                m_view, m_proj, kBladeEdgeColor);
-            m_obstacleMesh->Draw(
-                Matrix::CreateScale(0.007f, 0.56f, 0.017f) * eBRot * Matrix::CreateTranslation(ebPos - ebRight * 0.055f),
-                m_view, m_proj, kBladeEdgeColor);
-            // 刃先
-            m_obstacleMesh->Draw(
-                Matrix::CreateScale(0.04f, 0.07f, 0.011f) * eBRot * Matrix::CreateTranslation(ebPos + ebDir * 0.32f),
-                m_view, m_proj, kBladeEdgeColor);
-            // 鍔
-            m_obstacleMesh->Draw(
-                Matrix::CreateScale(0.26f, 0.028f, 0.075f) * eBRot * Matrix::CreateTranslation(ebPos - ebDir * 0.30f),
-                m_view, m_proj, ev.trimColor);
-            // 柄
-            m_obstacleMesh->Draw(
-                Matrix::CreateScale(0.040f, 0.18f, 0.052f) * eBRot * Matrix::CreateTranslation(ebPos - ebDir * 0.42f),
-                m_view, m_proj, kGripColor);
-
-            // 攻撃予備動作キュー
-            if (eAtk > 0.05f)
-            {
-                const Vector3 eFwd2(std::sin(en.yaw), 0.0f, std::cos(en.yaw));
-                m_effectTrailMesh->Draw(
-                    Matrix::CreateScale(0.22f + eAtk * 0.08f, 0.03f, 1.12f + eAtk * 0.34f) *
-                    Matrix::CreateRotationZ(0.52f) * Matrix::CreateRotationX(-0.22f) *
-                    Matrix::CreateRotationY(en.yaw + 0.04f) *
-                    Matrix::CreateTranslation(en.position + eFwd2 * (0.82f + eAtk * 0.18f) + Vector3(0.0f, 1.02f, 0.0f)),
-                    m_view, m_proj,
-                    Color(1.0f, 0.30f, 0.18f, 0.16f + eAtk * 0.30f));
-            }
-        }
-
-        // 被弾カットライン
-        if (!lowLod && hitB > 0.01f)
-        {
-            const Vector3 eFwd2(std::sin(en.yaw), 0.0f, std::cos(en.yaw));
-            m_obstacleMesh->Draw(
-                Matrix::CreateScale(0.54f + hitB * 0.14f, 0.028f, 0.12f) *
-                Matrix::CreateRotationZ(0.78f) *
-                Matrix::CreateRotationY(en.yaw + 0.12f) *
-                Matrix::CreateTranslation(en.position + Vector3(0.0f, 1.04f + hitB * 0.04f, 0.0f)),
-                m_view, m_proj,
-                Color(0.26f, 0.02f, 0.03f, 0.24f + hitB * 0.34f));
-        }
-
-        // HP バー（ビルボード）
-        if (!lowLod)
-        {
-            const float hpR = Utility::MathEx::Clamp(en.hp / std::max(1.0f, en.maxHp), 0.0f, 1.0f);
-            const Vector3 hpA = en.position + Vector3(0.0f, 2.08f, 0.0f);
-            Vector3 tc = camPos - hpA; tc.y = 0.0f;
-            if (tc.LengthSquared() < 0.0001f) tc = Vector3::UnitZ; else tc.Normalize();
-            const float hpYaw = std::atan2(tc.x, tc.z);
-
-            m_obstacleMesh->Draw(
-                Matrix::CreateScale(0.84f, 0.05f, 0.10f) * Matrix::CreateRotationY(hpYaw) * Matrix::CreateTranslation(hpA),
-                m_view, m_proj, Color(0.08f, 0.08f, 0.10f, 0.92f));
-            m_obstacleMesh->Draw(
-                Matrix::CreateScale(0.82f * hpR, 0.036f, 0.08f) *
-                Matrix::CreateTranslation((hpR - 1.0f) * 0.41f, 0.0f, 0.0f) *
-                Matrix::CreateRotationY(hpYaw) * Matrix::CreateTranslation(hpA + Vector3(0.0f, 0.0f, -0.002f)),
-                m_view, m_proj,
-                Color(0.24f + (1.0f - hpR) * 0.72f, 0.86f * hpR + 0.16f, 0.2f, 0.95f));
-        }
-
-        // デバッグ: A* 経路
-        if (m_showPathDebug && !lowLod && !en.path.empty())
-        {
-            for (size_t c = en.pathCursor; c < en.path.size(); ++c)
-            {
-                const Vector3 p = m_grid.GridToWorld(en.path[c], 0.05f);
-                m_debugCellMesh->Draw(
-                    Matrix::CreateScale(0.2f, 0.05f, 0.2f) * Matrix::CreateTranslation(p),
-                    m_view, m_proj, DirectX::Colors::Orange);
-            }
-        }
-    }
-
-    // 斬撃ヒットエフェクト
-    if (m_effectTrailMesh && m_effectOrbMesh)
-    {
-        m_slashHitEffects.Draw(*m_effectTrailMesh, *m_effectOrbMesh, m_view, m_proj);
-    }
+	if (m_effectTrailMesh && m_effectOrbMesh)
+	{
+		m_slashHitEffects.Draw(*m_effectTrailMesh, *m_effectOrbMesh, m_view, m_proj);
+	}
 }

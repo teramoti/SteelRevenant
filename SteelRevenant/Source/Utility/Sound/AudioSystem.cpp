@@ -84,12 +84,28 @@ namespace GameAudio
 
     void AudioSystem::Shutdown()
     {
+        if (!m_engine && !m_initialized)
+        {
+            return;
+        }
+
         StopBgm(true);
 
+        if (m_engine)
+        {
+            m_engine->Suspend();
+        }
+
+        m_currentBgm.reset();
         m_bgmEffects.clear();
         m_seEffects.clear();
         m_bgmDefs.clear();
         m_seDefs.clear();
+
+        if (m_engine)
+        {
+            m_engine->TrimVoicePool();
+        }
 
         m_engine.reset();
         m_initialized = false;

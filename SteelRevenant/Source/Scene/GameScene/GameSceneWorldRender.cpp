@@ -17,5 +17,6 @@ void GameScene::DrawWorld()
 
 	DrawWorldBackdrop();
 	DrawWorldArena();
+	DrawSpeedUpItems();
 	DrawWorldActors();
 }

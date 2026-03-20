@@ -41,12 +41,16 @@ namespace
 	constexpr float kAttackAssistRangeDefault = 2.6f;
 	constexpr float kAttackAssistDotDefault = 0.30f;
 
-	constexpr float kComboAttackWindowSec = 0.18f;
+	constexpr float kComboAttackWindowSec = 0.11f;
 	constexpr float kComboCooldownSec = 0.25f;
 	constexpr float kComboChainWindowSec = 0.45f;
 	constexpr float kComboGaugeDecayPerSec = 7.5f;
 	constexpr float kComboGaugeHitGain = 16.0f;
 	constexpr float kComboGaugeKillBonus = 7.0f;
+	constexpr float kComboAttackWindupSec = 0.10f;
+	constexpr float kComboAttackActiveSec = 0.11f;
+	constexpr float kComboAttackFollowThroughSec = 0.07f;
+	constexpr float kComboAttackRecoverSec = 0.12f;
 
 	constexpr float kEnemyRepathSec = 0.25f;
 	constexpr float kEnemyMeleeAttackTriggerDistance = 2.1f;
@@ -60,6 +64,8 @@ namespace
 	constexpr float kEnemyLeashDistance = 28.0f;
 	constexpr float kEnemyReturnArriveDistance = 0.95f;
 	constexpr float kEnemyHitStunSec = 0.26f;
+	constexpr float kEnemyKnockbackSpeed = 6.8f;
+	constexpr float kEnemyKnockbackDamping = 8.5f;
 
 	constexpr float kEnemyMeleeDamageBase = 12.0f;
 	constexpr float kEnemyMeleeDamagePerDanger = 2.3f;
@@ -360,6 +366,10 @@ namespace Action
 			m_tuning.comboGaugeDecayPerSec = kComboGaugeDecayPerSec;
 			m_tuning.comboGaugeHitGain = kComboGaugeHitGain;
 			m_tuning.comboGaugeKillBonus = kComboGaugeKillBonus;
+			m_tuning.comboAttackWindupSec = kComboAttackWindupSec;
+			m_tuning.comboAttackActiveSec = kComboAttackActiveSec;
+			m_tuning.comboAttackFollowThroughSec = kComboAttackFollowThroughSec;
+			m_tuning.comboAttackRecoverSec = kComboAttackRecoverSec;
 			m_tuning.enemyRepathSec = kEnemyRepathSec;
 			m_tuning.enemyMeleeAttackTriggerDistance = kEnemyMeleeAttackTriggerDistance;
 			m_tuning.enemyMeleeAttackReach = kEnemyMeleeAttackReach;
@@ -372,6 +382,8 @@ namespace Action
 			m_tuning.enemyLeashDistance = kEnemyLeashDistance;
 			m_tuning.enemyReturnArriveDistance = kEnemyReturnArriveDistance;
 			m_tuning.enemyHitStunSec = kEnemyHitStunSec;
+			m_tuning.enemyKnockbackSpeed = kEnemyKnockbackSpeed;
+			m_tuning.enemyKnockbackDamping = kEnemyKnockbackDamping;
 			m_tuning.enemyMeleeDamageBase = kEnemyMeleeDamageBase;
 			m_tuning.enemyMeleeDamagePerDanger = kEnemyMeleeDamagePerDanger;
 			m_tuning.enemyMeleeGuardDamageScale = kEnemyMeleeGuardDamageScale;
@@ -451,6 +463,19 @@ namespace Action
 			enemy.stateTimer = std::max(0.0f, enemy.stateTimer - dt);
 			enemy.repathTimer = std::max(0.0f, enemy.repathTimer - dt);
 			enemy.wanderPauseSec = std::max(0.0f, enemy.wanderPauseSec - dt);
+			enemy.hitReactTimer = std::max(0.0f, enemy.hitReactTimer - dt);
+
+			if (enemy.hitReactTimer > 0.0f)
+			{
+				enemy.position += enemy.knockbackVelocity * dt;
+				const float knockbackBlend = Utility::MathEx::Clamp(1.0f - std::exp(-m_tuning.enemyKnockbackDamping * dt), 0.0f, 1.0f);
+				enemy.knockbackVelocity += (Vector3::Zero - enemy.knockbackVelocity) * knockbackBlend;
+				if (enemy.knockbackVelocity.LengthSquared() > 0.0001f)
+				{
+					enemy.yaw = std::atan2(enemy.knockbackVelocity.x, enemy.knockbackVelocity.z);
+				}
+				continue;
+			}
 
 			const float distToPlayer = FlatDistance(enemy.position, player.position);
 			const float distToSpawn = FlatDistance(enemy.position, enemy.spawnPosition);

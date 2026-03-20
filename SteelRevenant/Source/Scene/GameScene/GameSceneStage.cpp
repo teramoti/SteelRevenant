@@ -168,7 +168,6 @@ void GameScene::SetupStage()
 		break;
 	}
 
-	SetupRelayNodesAndHazards();
 	m_minimapBlockedCells = m_grid.GetBlockedCells();
 }
 

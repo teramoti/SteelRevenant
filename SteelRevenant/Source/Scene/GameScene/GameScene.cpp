@@ -1,4 +1,4 @@
-﻿//------------------------//------------------------
+//------------------------//------------------------
 // Contents(処理内容) 本編ゲームシーンの共通初期化と共有状態を実装する。
 //------------------------//------------------------
 // user(作成者) Keishi Teramoto
@@ -59,7 +59,6 @@ namespace
 	constexpr float kHitStopSecMax = 0.055f;
 	constexpr int kPauseMenuCount = 4;
 	constexpr float kPauseClickFxDurationSec = 0.24f;
-	constexpr float kObjectiveBannerDurationSec = 2.8f;
 	constexpr float kStageIntroDurationSec = 1.15f;
 }
 
@@ -80,16 +79,15 @@ GameScene::GameScene(SceneManager* scenemaneger)
 	, m_pauseSelectedIndex(0)
 	, m_pauseClickFxTimer(0.0f)
 	, m_pauseClickFxPos(Vector2::Zero)
-	, m_recoveryBeaconUseCount(0)
-	, m_requiredRelayCount(0)
-	, m_objectiveBannerTimer(0.0f)
-	, m_objectiveBannerText()
 	, m_finishDelay(Action::BattleRuleBook::GetInstance().GetResultDelaySec())
 	, m_stageIntroTimer(0.0f)
 	, m_stageThemeIndex(1)
 	, m_resultPushed(false)
 	, m_showPathDebug(false)
 	, m_showHudDetail(false)
+	, m_speedUpTimer(0.0f)
+	, m_speedUpMultiplier(1.5f)
+	, m_isFinalized(false)
 {
 }
 
@@ -102,6 +100,7 @@ GameScene::~GameScene()
 // 本編シーンの描画、戦闘、進行状態を初期化する。
 void GameScene::Initialize()
 {
+	m_isFinalized = false;
 	DirectX::Mouse::Get().SetMode(DirectX::Mouse::MODE_RELATIVE);
 	SetSystemCursorVisible(false);
 
@@ -148,19 +147,15 @@ void GameScene::Initialize()
 	m_pauseSelectedIndex = 0;
 	m_pauseClickFxTimer = 0.0f;
 	m_pauseClickFxPos = Vector2::Zero;
-	m_recoveryBeaconUseCount = 0;
-	m_requiredRelayCount = 0;
 	m_stageIntroTimer = kStageIntroDurationSec;
-	m_objectiveBannerTimer = kObjectiveBannerDurationSec;
-	m_objectiveBannerText = Action::BattleRuleBook::GetInstance().GetActiveRule().missionSummary;
 
 	m_floorMesh        = DirectX::GeometricPrimitive::CreateCube(m_directX.GetContext().Get());
 	m_skyMesh          = DirectX::GeometricPrimitive::CreateSphere(m_directX.GetContext().Get(), 1.0f, 18);
 	// プレイヤー・敵の体幹は高解像度シリンダー（滑らかな人体シルエット）
 	m_playerMesh       = DirectX::GeometricPrimitive::CreateCylinder(m_directX.GetContext().Get(), 1.0f, 1.0f, 24);
 	m_enemyMesh        = DirectX::GeometricPrimitive::CreateSphere(m_directX.GetContext().Get(), 1.0f, 20);
-	// 剣刃: 薄い長方形（幅広で刃らしいシルエット）
-	m_weaponMesh       = DirectX::GeometricPrimitive::CreateBox(m_directX.GetContext().Get(), DirectX::XMFLOAT3(0.22f, 1.44f, 0.022f));
+	// 両手大剣の刃身。
+	m_weaponMesh       = DirectX::GeometricPrimitive::CreateBox(m_directX.GetContext().Get(), DirectX::XMFLOAT3(0.20f, 1.68f, 0.020f));
 	m_obstacleMesh     = DirectX::GeometricPrimitive::CreateBox(m_directX.GetContext().Get(), DirectX::XMFLOAT3(1.0f, 1.0f, 1.0f));
 	m_effectOrbMesh    = DirectX::GeometricPrimitive::CreateSphere(m_directX.GetContext().Get(), 1.0f, 16);
 	// 斬撃トレイル: 薄い板（弧を描く軌跡に使う）
@@ -259,5 +254,3 @@ void GameScene::DrawSolidRect(
 	const DirectX::XMFLOAT2 scale(size.x, size.y);
 	batch->Draw(m_uiSolidTexture.Get(), position, nullptr, color, 0.0f, Vector2::Zero, scale);
 }
-
-

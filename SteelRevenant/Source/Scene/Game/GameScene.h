@@ -257,7 +257,6 @@ private:
     float m_attackAssistDotView;   ///< デバッグ表示用攻撃アシスト閾値
     bool  m_showPathDebug;         ///< A* グリッド可視化フラグ
     bool  m_showHudDetail;         ///< デバッグ HUD 表示フラグ
-    int   m_recoveryBeaconUseCount;///< 回復ビーコン累積使用回数
     bool  m_resultPushed2;         ///< 二重遷移防止フラグ（内部用）
 
     std::vector<Navigation::PathGrid::GridCoord> m_minimapBlockedCells; ///< ミニマップ用通行不可セルキャッシュ

@@ -15,6 +15,7 @@ using DirectX::SimpleMath::Vector3;
 namespace
 {
 	constexpr float kFloorPulseSpeed = 1.6f;
+	constexpr float kFloorSweepSpeed = 0.42f;
 }
 
 void GameScene::DrawWorldArena()
@@ -74,6 +75,28 @@ void GameScene::DrawWorldArena()
 	m_obstacleMesh->Draw(Matrix::CreateScale(0.22f, 0.022f, 52.0f) * Matrix::CreateTranslation(-26.0f, 0.075f, 0.0f), m_view, m_proj, rimColor);
 	m_obstacleMesh->Draw(Matrix::CreateScale(0.22f, 0.022f, 52.0f) * Matrix::CreateTranslation( 26.0f, 0.075f, 0.0f), m_view, m_proj, rimColor);
 
+	const float sweepOffset = std::sinf(m_sceneTime * kFloorSweepSpeed) * 18.0f;
+	const Color sweepColor = StageTint(Color(
+		floorPalette.accentColor.R(),
+		floorPalette.accentColor.G(),
+		floorPalette.accentColor.B(),
+		0.10f + floorPulse * 0.08f));
+	const Color glossColor = StageTint(Color(0.82f, 0.94f, 1.0f, 0.06f + floorPulse * 0.05f));
+	m_obstacleMesh->Draw(
+		Matrix::CreateScale(10.0f, 0.015f, 52.0f) * Matrix::CreateRotationY(0.16f) * Matrix::CreateTranslation(sweepOffset, 0.082f, 0.0f),
+		m_view, m_proj, sweepColor);
+	m_obstacleMesh->Draw(
+		Matrix::CreateScale(6.0f, 0.012f, 48.0f) * Matrix::CreateRotationY(-0.22f) * Matrix::CreateTranslation(-sweepOffset * 0.75f, 0.083f, 0.0f),
+		m_view, m_proj, glossColor);
+	for (int panelIndex = -3; panelIndex <= 3; ++panelIndex)
+	{
+		const float xf = static_cast<float>(panelIndex) * 7.5f;
+		m_obstacleMesh->Draw(
+			Matrix::CreateScale(4.8f, 0.010f, 22.0f) * Matrix::CreateTranslation(xf, 0.080f, 0.0f),
+			m_view, m_proj,
+			StageTint(Color(floorPalette.panelColor.R() + 0.02f, floorPalette.panelColor.G() + 0.02f, floorPalette.panelColor.B() + 0.03f, 0.18f)));
+	}
+
 	std::vector<SceneFx::FloorDrawCommand> floorDetailCommands;
 	floorDetailCommands.reserve(128);
 	if (m_floorStyle)
@@ -86,109 +109,9 @@ void GameScene::DrawWorldArena()
 		m_obstacleMesh->Draw(command.world, m_view, m_proj, StageTint(command.color));
 	}
 
-	for (size_t hazardIndex = 0; hazardIndex < m_hazardZones.size(); ++hazardIndex)
-	{
-		const HazardZoneInfo& zone = m_hazardZones[hazardIndex];
-		const float cycle = std::max(0.1f, zone.warmupSec + zone.activeSec);
-		const float local = std::fmod(m_sceneTime + zone.phaseOffsetSec, cycle);
-		const bool active = (local >= zone.warmupSec);
-		const float phaseT = active
-			? Utility::MathEx::Clamp((local - zone.warmupSec) / std::max(0.001f, zone.activeSec), 0.0f, 1.0f)
-			: Utility::MathEx::Clamp(local / std::max(0.001f, zone.warmupSec), 0.0f, 1.0f);
-		const Color fillColor = active
-			? StageTint(Color(1.0f, 0.18f + phaseT * 0.2f, 0.08f, 0.58f))
-			: StageTint(Color(1.0f, 0.72f, 0.18f, 0.24f + phaseT * 0.18f));
-		const Matrix hazardWorld =
-			Matrix::CreateScale(zone.halfExtent.x * 2.0f, 0.05f, zone.halfExtent.y * 2.0f) *
-			Matrix::CreateTranslation(zone.center.x, 0.075f, zone.center.z);
-		m_floorMesh->Draw(hazardWorld, m_view, m_proj, fillColor);
 
-		const Matrix borderWorld =
-			Matrix::CreateScale(zone.halfExtent.x * 2.08f, 0.018f, zone.halfExtent.y * 2.08f) *
-			Matrix::CreateTranslation(zone.center.x, 0.11f, zone.center.z);
-		m_obstacleMesh->Draw(borderWorld, m_view, m_proj, active ? Color(1.0f, 0.86f, 0.18f, 0.42f) : Color(1.0f, 0.74f, 0.24f, 0.22f));
-	}
 
-	for (size_t relayIndex = 0; relayIndex < m_relayNodes.size(); ++relayIndex)
-	{
-		const RelayNodeInfo& relay = m_relayNodes[relayIndex];
-		const float pulse = std::sinf(m_sceneTime * 2.6f + relay.pulseSeed * 4.1f) * 0.5f + 0.5f;
-		const bool contested = (!relay.captured) && (CountLivingEnemiesNear(relay.position, relay.radius + 4.5f) > 0);
-		const Color relayColor = relay.captured
-			? Color(0.34f, 1.0f, 0.58f, 0.92f)
-			: (contested ? Color(1.0f, 0.42f, 0.18f, 0.88f) : Color(0.28f, 0.9f, 1.0f, 0.84f));
-		const Matrix relayBaseWorld =
-			Matrix::CreateScale(relay.radius * (0.92f + pulse * 0.06f), 0.08f, relay.radius * (0.92f + pulse * 0.06f)) *
-			Matrix::CreateTranslation(relay.position.x, 0.14f, relay.position.z);
-		const Matrix relayRingWorld =
-			Matrix::CreateScale(relay.radius * (1.16f + pulse * 0.1f), 0.024f, relay.radius * (1.16f + pulse * 0.1f)) *
-			Matrix::CreateTranslation(relay.position.x, 0.22f, relay.position.z);
-		const Matrix relayCoreWorld =
-			Matrix::CreateScale(0.58f + relay.captureProgress * 0.18f, 0.04f, 0.58f + relay.captureProgress * 0.18f) *
-			Matrix::CreateTranslation(relay.position.x, 0.18f, relay.position.z);
-		m_floorMesh->Draw(relayBaseWorld, m_view, m_proj, StageTint(relayColor));
-		m_obstacleMesh->Draw(relayRingWorld, m_view, m_proj, StageTint(Color(relayColor.x, relayColor.y, relayColor.z, 0.48f)));
-		m_obstacleMesh->Draw(relayCoreWorld, m_view, m_proj, StageTint(Color(relayColor.x, relayColor.y, relayColor.z, relay.captured ? 0.52f : 0.36f)));
-		if (!relay.captured && relay.captureProgress > 0.0f)
-		{
-			const Matrix relayProgressWorld =
-				Matrix::CreateScale(relay.radius * relay.captureProgress, 0.03f, relay.radius * relay.captureProgress) *
-				Matrix::CreateTranslation(relay.position.x, 0.18f, relay.position.z);
-			m_obstacleMesh->Draw(relayProgressWorld, m_view, m_proj, StageTint(Color(0.94f, 0.96f, 1.0f, 0.68f)));
-		}
-	}
 
-	for (size_t patrolIndex = 0; patrolIndex < m_patrolHazards.size(); ++patrolIndex)
-	{
-		const PatrolHazardInfo& hazard = m_patrolHazards[patrolIndex];
-		const Vector3 center = EvaluatePatrolHazardPosition(patrolIndex);
-		const float pulse = std::sinf(m_sceneTime * 4.0f + hazard.phaseSeed * 6.0f) * 0.5f + 0.5f;
-		const Matrix sweepRingWorld =
-			Matrix::CreateScale(hazard.radius * (1.05f + pulse * 0.12f), 0.03f, hazard.radius * (1.05f + pulse * 0.12f)) *
-			Matrix::CreateTranslation(center.x, 0.15f, center.z);
-		const Matrix sweepCoreWorld =
-			Matrix::CreateScale(0.62f + pulse * 0.18f, 0.03f, 0.62f + pulse * 0.18f) *
-			Matrix::CreateTranslation(center.x, 0.18f, center.z);
-		const Matrix sweepSpokeA =
-			Matrix::CreateScale(hazard.radius * 1.9f, 0.018f, 0.14f) *
-			Matrix::CreateRotationY(m_sceneTime * (0.8f + hazard.cycleSpeed) + hazard.phaseSeed * 3.1f) *
-			Matrix::CreateTranslation(center.x, 0.2f, center.z);
-		const Matrix sweepSpokeB =
-			Matrix::CreateScale(0.14f, 0.018f, hazard.radius * 1.9f) *
-			Matrix::CreateRotationY(-m_sceneTime * (0.72f + hazard.cycleSpeed * 0.7f) - hazard.phaseSeed * 2.7f) *
-			Matrix::CreateTranslation(center.x, 0.205f, center.z);
-		m_obstacleMesh->Draw(sweepRingWorld, m_view, m_proj, StageTint(Color(1.0f, 0.36f, 0.24f, 0.62f)));
-		m_obstacleMesh->Draw(sweepCoreWorld, m_view, m_proj, StageTint(Color(1.0f, 0.62f, 0.3f, 0.28f)));
-		m_obstacleMesh->Draw(sweepSpokeA, m_view, m_proj, StageTint(Color(1.0f, 0.78f, 0.28f, 0.52f)));
-		m_obstacleMesh->Draw(sweepSpokeB, m_view, m_proj, StageTint(Color(1.0f, 0.55f, 0.18f, 0.46f)));
-		const Matrix pathMarker =
-			Matrix::CreateScale(0.2f, 0.02f, (hazard.end - hazard.start).Length() * 0.5f) *
-			Matrix::CreateRotationY(std::atan2(hazard.end.x - hazard.start.x, hazard.end.z - hazard.start.z)) *
-			Matrix::CreateTranslation((hazard.start.x + hazard.end.x) * 0.5f, 0.07f, (hazard.start.z + hazard.end.z) * 0.5f);
-		m_floorMesh->Draw(pathMarker, m_view, m_proj, StageTint(Color(1.0f, 0.42f, 0.18f, 0.16f)));
-	}
-
-	for (size_t beaconIndex = 0; beaconIndex < m_recoveryBeacons.size(); ++beaconIndex)
-	{
-		const RecoveryBeaconInfo& beacon = m_recoveryBeacons[beaconIndex];
-		const float cooldownRatio = (beacon.maxCooldownSec > 0.0f) ? Utility::MathEx::Clamp(1.0f - beacon.cooldownSec / beacon.maxCooldownSec, 0.0f, 1.0f) : 1.0f;
-		const float pulse = std::sinf(m_sceneTime * 2.2f + beacon.pulseSeed * 5.1f) * 0.5f + 0.5f;
-		const Color beaconColor = (beacon.cooldownSec <= 0.0f)
-			? Color(0.28f, 1.0f, 0.9f, 0.9f)
-			: Color(0.3f, 0.58f + cooldownRatio * 0.22f, 0.8f, 0.48f);
-		const Matrix beaconBaseWorld =
-			Matrix::CreateScale(beacon.radius * (0.88f + pulse * 0.08f), 0.05f, beacon.radius * (0.88f + pulse * 0.08f)) *
-			Matrix::CreateTranslation(beacon.position.x, 0.11f, beacon.position.z);
-		const Matrix beaconCoreWorld =
-			Matrix::CreateScale(0.56f + pulse * 0.06f, 0.032f, 0.56f + pulse * 0.06f) *
-			Matrix::CreateTranslation(beacon.position.x, 0.17f, beacon.position.z);
-		const Matrix beaconRingWorld =
-			Matrix::CreateScale(beacon.radius * (1.14f + pulse * 0.1f), 0.018f, beacon.radius * (1.14f + pulse * 0.1f)) *
-			Matrix::CreateTranslation(beacon.position.x, 0.18f, beacon.position.z);
-		m_floorMesh->Draw(beaconBaseWorld, m_view, m_proj, StageTint(beaconColor));
-		m_obstacleMesh->Draw(beaconCoreWorld, m_view, m_proj, StageTint(Color(beaconColor.x, beaconColor.y, beaconColor.z, 0.38f + cooldownRatio * 0.18f)));
-		m_obstacleMesh->Draw(beaconRingWorld, m_view, m_proj, StageTint(Color(0.92f, 1.0f, 1.0f, 0.52f)));
-	}
 
 	auto DrawTheme2Strips = [&]()
 	{

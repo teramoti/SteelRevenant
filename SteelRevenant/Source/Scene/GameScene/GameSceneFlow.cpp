@@ -1,4 +1,4 @@
-﻿//------------------------//------------------------
+//------------------------//------------------------
 // Contents(処理内容) ポーズ遷移とリザルト遷移の制御を実装する。
 //------------------------//------------------------
 // user(作成者) Keishi Teramoto
@@ -199,13 +199,14 @@ void GameScene::DrawPauseOverlay(
 // 現在状態からライブスコアを算出する。
 int GameScene::ComputeStageScore() const
 {
-	const int relayCaptured = GetCapturedRelayCount();
+	const int relayCaptured = 0;
 	const int rawScore =
 		m_gameState.killCount * 100 +
 		static_cast<int>(std::floor(std::max(0.0f, m_gameState.survivalTimeSec) * 10.0f)) +
+		(m_gameState.stageCleared ? 2000 : 0) +
 		relayCaptured * 500 -
 		m_gameState.damageTaken * 15 -
-		m_recoveryBeaconUseCount * 120;
+		0 * 120;
 	return std::max(0, rawScore);
 }
 
@@ -219,8 +220,8 @@ void GameScene::PushResultAndExit()
 
 	m_resultPushed = true;
 
-	const int relayCaptured = GetCapturedRelayCount();
-	const int relayRequired = GetRequiredRelayCount();
+	const int relayCaptured = 0;
+	const int relayRequired = 0;
 	m_gameState.score = ComputeStageScore();
 	const bool isNewRecord = GameSaveData::GetInstance().UpdateBestScore(m_stageThemeIndex, m_gameState.score);
 
@@ -229,9 +230,8 @@ void GameScene::PushResultAndExit()
 	result.killCount = m_gameState.killCount;
 	result.survivalTimeSec = m_gameState.survivalTimeSec;
 	result.damageTaken = m_gameState.damageTaken;
-	result.relayCaptured = relayCaptured;
+	result.relayCaptured = 0;
 	result.relayRequired = relayRequired;
-	result.beaconUseCount = m_recoveryBeaconUseCount;
 	result.totalScore = m_gameState.score;
 	result.peakDangerLevel = m_gameState.peakDangerLevel;
 	result.bestScore = GameSaveData::GetInstance().GetBestScore(m_stageThemeIndex);
@@ -266,15 +266,19 @@ void GameScene::AddCameraShake(float intensity, float durationSec)
 // 本編シーンの一時リソースと状態を破棄する。
 void GameScene::Finalize()
 {
+	if (m_isFinalized)
+	{
+		return;
+	}
+	m_isFinalized = true;
+	DirectX::Mouse::Get().SetMode(DirectX::Mouse::MODE_ABSOLUTE);
+	SetSystemCursorVisible(true);
+
 	m_enemies.clear();
 	m_obstacleWorlds.clear();
 	m_spawnPoints.clear();
 	m_minimapBlockedCells.clear();
 	m_obstacleBounds.clear();
-	m_relayNodes.clear();
-	m_hazardZones.clear();
-	m_patrolHazards.clear();
-	m_recoveryBeacons.clear();
 	ResetTransientVisualState();
 	m_mouseSensitivityView = 0.08f;
 	const Action::CombatTuning& tuning = m_combat.GetTuning();
@@ -302,13 +306,56 @@ void GameScene::Finalize()
 // 攻撃演出用の補間率を返す。
 float GameScene::GetAttackBlend() const
 {
-	if (m_player.attackTimer <= 0.0f || m_player.comboIndex <= 0)
+	if (m_player.comboIndex <= 0 || m_player.attackPhase == Action::PlayerAttackPhase::Idle)
 	{
 		return 0.0f;
 	}
 
-	const float blend = 1.0f - (m_player.attackTimer / kAttackVisualDurationSec);
-	return Utility::MathEx::Clamp(blend, 0.0f, 1.0f);
+	const Action::CombatTuning& tuning = m_combat.GetTuning();
+	const float totalSec =
+		std::max(0.0f, tuning.comboAttackWindupSec) +
+		std::max(0.0f, tuning.comboAttackActiveSec) +
+		std::max(0.0f, tuning.comboAttackFollowThroughSec) +
+		std::max(0.0f, tuning.comboAttackRecoverSec);
+	if (totalSec <= 0.0f)
+	{
+		return 0.0f;
+	}
+
+	float elapsedSec = 0.0f;
+	switch (m_player.attackPhase)
+	{
+	case Action::PlayerAttackPhase::Windup:
+		elapsedSec = tuning.comboAttackWindupSec * m_player.attackPhaseBlend;
+		break;
+
+	case Action::PlayerAttackPhase::Active:
+		elapsedSec =
+			tuning.comboAttackWindupSec +
+			tuning.comboAttackActiveSec * m_player.attackPhaseBlend;
+		break;
+
+	case Action::PlayerAttackPhase::FollowThrough:
+		elapsedSec =
+			tuning.comboAttackWindupSec +
+			tuning.comboAttackActiveSec +
+			tuning.comboAttackFollowThroughSec * m_player.attackPhaseBlend;
+		break;
+
+	case Action::PlayerAttackPhase::Recover:
+		elapsedSec =
+			tuning.comboAttackWindupSec +
+			tuning.comboAttackActiveSec +
+			tuning.comboAttackFollowThroughSec +
+			tuning.comboAttackRecoverSec * m_player.attackPhaseBlend;
+		break;
+
+	case Action::PlayerAttackPhase::Idle:
+	default:
+		break;
+	}
+
+	return Utility::MathEx::Clamp(elapsedSec / totalSec, 0.0f, 1.0f);
 }
 
 

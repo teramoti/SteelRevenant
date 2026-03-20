@@ -1,10 +1,3 @@
-//------------------------//------------------------
-// Contents(処理内容) サバイバル進行と敵補充制御を実装する。
-//------------------------//------------------------
-// user(作成者) Keishi Teramoto
-// Created date(作成日) 2026 / 03 / 18
-// last updated (最終更新日) 2026 / 03 / 18
-//------------------------//------------------------
 #include "SurvivalDirector.h"
 
 #include <algorithm>
@@ -21,7 +14,7 @@ namespace Action
 		constexpr int kDangerLevelMax = 10;
 	}
 
-	// サバイバル制御の内部状態を既定値で初期化する。
+	// 既定値でウェーブディレクタを構築する。
 	SurvivalDirector::SurvivalDirector()
 		: m_dangerLevel(1)
 		, m_peakDangerLevel(1)
@@ -30,23 +23,36 @@ namespace Action
 		, m_spawnSerial(0)
 		, m_spawnCooldownSec(0.0f)
 		, m_spawnIntervalSec(1.0f)
+		, m_waveBreakTimerSec(0.0f)
+		, m_waveBreakDurationSec(0.0f)
+		, m_currentWave(1)
+		, m_totalWaveCount(1)
+		, m_waveEnemyQuota(0)
+		, m_waveSpawnedCount(0)
+		, m_waveBreak(false)
+		, m_completed(false)
 	{
 	}
 
-	// ステージ開始時の進行状態へ戻す。
+	// ステージ開始時のウェーブ進行へ戻す。
 	void SurvivalDirector::Reset()
 	{
 		const BattleRuleBook& ruleBook = BattleRuleBook::GetInstance();
 		m_dangerLevel = 1;
 		m_peakDangerLevel = 1;
-		m_targetAliveCount = ruleBook.GetBaseAliveCount();
-		m_spawnBatch = ruleBook.GetBaseSpawnBatch();
 		m_spawnSerial = 0;
 		m_spawnCooldownSec = 0.0f;
 		m_spawnIntervalSec = ruleBook.GetBaseSpawnIntervalSec();
+		m_waveBreakTimerSec = 0.0f;
+		m_waveBreakDurationSec = ruleBook.GetWaveBreakSec();
+		m_totalWaveCount = std::max(1, ruleBook.GetTotalWaveCount());
+		m_currentWave = 1;
+		m_waveBreak = false;
+		m_completed = false;
+		BeginWave(1);
 	}
 
-	// 撃破数、経過時間、生存敵数から危険度と補充量を更新する。
+	// 時間経過、撃破数、残敵数からウェーブ状態を進める。
 	void SurvivalDirector::Update(float dt, int killCount, float survivalTimeSec, int livingEnemyCount)
 	{
 		const BattleRuleBook& ruleBook = BattleRuleBook::GetInstance();
@@ -54,28 +60,37 @@ namespace Action
 		const float timeStepSec = std::max(1.0f, ruleBook.GetTimeRampStepSec());
 		const int killTier = std::max(0, killCount / killStep);
 		const int timeTier = std::max(0, static_cast<int>(std::floor(survivalTimeSec / timeStepSec)));
-		m_dangerLevel = Utility::MathEx::Clamp(1 + killTier + timeTier, 1, kDangerLevelMax);
+		m_dangerLevel = Utility::MathEx::Clamp(1 + killTier + timeTier + (m_currentWave - 1), 1, kDangerLevelMax);
 		m_peakDangerLevel = std::max(m_peakDangerLevel, m_dangerLevel);
 
-		const float dangerRatio = static_cast<float>(m_dangerLevel - 1) / static_cast<float>(kDangerLevelMax - 1);
-		const float aliveValue =
-			static_cast<float>(ruleBook.GetBaseAliveCount()) +
-			(static_cast<float>(ruleBook.GetMaxAliveCount() - ruleBook.GetBaseAliveCount()) * dangerRatio);
-		const float batchValue =
-			static_cast<float>(ruleBook.GetBaseSpawnBatch()) +
-			(static_cast<float>(ruleBook.GetMaxSpawnBatch() - ruleBook.GetBaseSpawnBatch()) * dangerRatio);
+		m_spawnIntervalSec = std::max(
+			ruleBook.GetMinSpawnIntervalSec(),
+			ruleBook.GetBaseSpawnIntervalSec() - 0.08f * static_cast<float>(m_currentWave - 1));
 
-		m_targetAliveCount = Utility::MathEx::Clamp(
-			static_cast<int>(std::round(aliveValue)),
-			ruleBook.GetBaseAliveCount(),
-			ruleBook.GetMaxAliveCount());
-		m_spawnBatch = Utility::MathEx::Clamp(
-			static_cast<int>(std::round(batchValue)),
-			ruleBook.GetBaseSpawnBatch(),
-			ruleBook.GetMaxSpawnBatch());
-		m_spawnIntervalSec = GetCurrentSpawnIntervalSec();
+		if (m_completed)
+		{
+			m_spawnCooldownSec = 0.0f;
+			return;
+		}
 
-		if (livingEnemyCount < m_targetAliveCount)
+		if (m_waveBreak)
+		{
+			m_waveBreakTimerSec = std::max(0.0f, m_waveBreakTimerSec - dt);
+			if (m_waveBreakTimerSec <= 0.0f)
+			{
+				if (m_currentWave >= m_totalWaveCount)
+				{
+					m_completed = true;
+				}
+				else
+				{
+					BeginWave(m_currentWave + 1);
+				}
+			}
+			return;
+		}
+
+		if (livingEnemyCount < m_targetAliveCount && m_waveSpawnedCount < m_waveEnemyQuota)
 		{
 			m_spawnCooldownSec = std::max(0.0f, m_spawnCooldownSec - dt);
 		}
@@ -83,17 +98,25 @@ namespace Action
 		{
 			m_spawnCooldownSec = std::min(m_spawnCooldownSec, m_spawnIntervalSec);
 		}
+
+		if (m_waveSpawnedCount >= m_waveEnemyQuota && livingEnemyCount <= 0)
+		{
+			m_waveBreak = true;
+			m_waveBreakTimerSec = m_waveBreakDurationSec;
+			m_spawnCooldownSec = 0.0f;
+		}
 	}
 
-	// ステージ開始直後に配置する敵群を構築する。
+	// 初回配置分を生成する。
 	std::vector<EnemyState> SurvivalDirector::BuildInitialSpawn(const std::vector<DirectX::SimpleMath::Vector3>& spawnPoints)
 	{
-		const int spawnCount = BattleRuleBook::GetInstance().GetOpeningAliveCount();
-		m_spawnCooldownSec = GetCurrentSpawnIntervalSec();
-		return BuildEnemies(spawnPoints, spawnCount);
+		const int openingCount = std::min(BuildWaveAliveCap(m_currentWave), m_waveEnemyQuota);
+		m_waveSpawnedCount = 0;
+		m_spawnCooldownSec = m_spawnIntervalSec;
+		return BuildEnemies(spawnPoints, openingCount);
 	}
 
-	// 現在不足している敵を補充する。
+	// 現在ウェーブの不足分だけ増援を生成する。
 	std::vector<EnemyState> SurvivalDirector::BuildSpawnBatch(const std::vector<DirectX::SimpleMath::Vector3>& spawnPoints, int livingEnemyCount)
 	{
 		if (!CanSpawn(livingEnemyCount))
@@ -101,25 +124,17 @@ namespace Action
 			return {};
 		}
 
+		const int remainingToSpawn = std::max(0, m_waveEnemyQuota - m_waveSpawnedCount);
 		const int deficit = std::max(0, m_targetAliveCount - livingEnemyCount);
-		const int spawnCount = Utility::MathEx::Clamp(deficit, 1, m_spawnBatch);
-		m_spawnCooldownSec = GetCurrentSpawnIntervalSec();
+		const int spawnCount = std::min({ remainingToSpawn, deficit, m_spawnBatch });
+		m_spawnCooldownSec = m_spawnIntervalSec;
 		return BuildEnemies(spawnPoints, spawnCount);
 	}
 
-	// 現在の危険度を返す。
-	int SurvivalDirector::GetDangerLevel() const
-	{
-		return m_dangerLevel;
-	}
+	int SurvivalDirector::GetDangerLevel() const { return m_dangerLevel; }
+	int SurvivalDirector::GetPeakDangerLevel() const { return m_peakDangerLevel; }
 
-	// これまでに到達した最大危険度を返す。
-	int SurvivalDirector::GetPeakDangerLevel() const
-	{
-		return m_peakDangerLevel;
-	}
-
-	// 補充クールダウンの進行率を返す。
+	// 現在の増援クールダウン進行率を返す。
 	float SurvivalDirector::GetSpawnCooldownRatio() const
 	{
 		if (m_spawnIntervalSec <= 0.0f)
@@ -129,13 +144,31 @@ namespace Action
 		return Utility::MathEx::Clamp(1.0f - (m_spawnCooldownSec / m_spawnIntervalSec), 0.0f, 1.0f);
 	}
 
-	// 現在の目標生存敵数を返す。
-	int SurvivalDirector::GetTargetAliveCount() const
+	int SurvivalDirector::GetTargetAliveCount() const { return m_targetAliveCount; }
+	int SurvivalDirector::GetCurrentWave() const { return m_currentWave; }
+	int SurvivalDirector::GetTotalWaveCount() const { return m_totalWaveCount; }
+	bool SurvivalDirector::IsWaveBreak() const { return m_waveBreak; }
+
+	// ウェーブ休止時間の進行率を返す。
+	float SurvivalDirector::GetWaveBreakRatio() const
 	{
-		return m_targetAliveCount;
+		if (!m_waveBreak || m_waveBreakDurationSec <= 0.0f)
+		{
+			return 0.0f;
+		}
+		return Utility::MathEx::Clamp(1.0f - (m_waveBreakTimerSec / m_waveBreakDurationSec), 0.0f, 1.0f);
 	}
 
-	// 指定数の敵を構築し、内部スポーン通番を進める。
+	// 現ウェーブでまだ倒れていない敵数を返す。
+	int SurvivalDirector::GetRemainingEnemiesInWave(int livingEnemyCount) const
+	{
+		const int remainingToSpawn = std::max(0, m_waveEnemyQuota - m_waveSpawnedCount);
+		return std::max(0, livingEnemyCount + remainingToSpawn);
+	}
+
+	bool SurvivalDirector::IsCompleted() const { return m_completed; }
+
+	// 生成要求に応じて敵リストを作る。
 	std::vector<EnemyState> SurvivalDirector::BuildEnemies(const std::vector<DirectX::SimpleMath::Vector3>& spawnPoints, int spawnCount)
 	{
 		std::vector<EnemyState> enemies;
@@ -155,21 +188,56 @@ namespace Action
 		}
 
 		m_spawnSerial += spawnCount;
+		m_waveSpawnedCount += spawnCount;
 		return enemies;
 	}
 
-	// 現在危険度に応じた補充間隔を返す。
-	float SurvivalDirector::GetCurrentSpawnIntervalSec() const
+	// ウェーブ番号から総敵数を組み立てる。
+	int SurvivalDirector::BuildWaveEnemyCount(int waveIndex) const
 	{
 		const BattleRuleBook& ruleBook = BattleRuleBook::GetInstance();
 		return std::max(
-			ruleBook.GetMinSpawnIntervalSec(),
-			ruleBook.GetBaseSpawnIntervalSec() - 0.12f * static_cast<float>(m_dangerLevel - 1));
+			ruleBook.GetOpeningAliveCount(),
+			ruleBook.GetBaseWaveEnemyCount() + (std::max(1, waveIndex) - 1) * ruleBook.GetWaveEnemyIncreasePerWave());
 	}
 
-	// 補充可能状態に入っているか返す。
+	// ウェーブ番号から同時出現上限を組み立てる。
+	int SurvivalDirector::BuildWaveAliveCap(int waveIndex) const
+	{
+		const BattleRuleBook& ruleBook = BattleRuleBook::GetInstance();
+		return std::max(
+			1,
+			ruleBook.GetBaseWaveAliveCap() + (std::max(1, waveIndex) - 1) * ruleBook.GetWaveAliveCapIncreasePerWave());
+	}
+
+	// 指定ウェーブの目標値へ更新する。
+	void SurvivalDirector::BeginWave(int waveIndex)
+	{
+		const BattleRuleBook& ruleBook = BattleRuleBook::GetInstance();
+		m_currentWave = Utility::MathEx::Clamp(waveIndex, 1, m_totalWaveCount);
+		m_waveEnemyQuota = BuildWaveEnemyCount(m_currentWave);
+		m_waveSpawnedCount = 0;
+		m_waveBreak = false;
+		m_waveBreakTimerSec = 0.0f;
+		m_targetAliveCount = BuildWaveAliveCap(m_currentWave);
+		m_spawnBatch = Utility::MathEx::Clamp(
+			ruleBook.GetBaseSpawnBatch() + (m_currentWave - 1),
+			ruleBook.GetBaseSpawnBatch(),
+			ruleBook.GetMaxSpawnBatch());
+		m_spawnCooldownSec = 0.0f;
+	}
+
+	// 現在ウェーブで増援可能か判定する。
 	bool SurvivalDirector::CanSpawn(int livingEnemyCount) const
 	{
-		return livingEnemyCount < m_targetAliveCount && m_spawnCooldownSec <= 0.0f;
+		if (m_completed || m_waveBreak)
+		{
+			return false;
+		}
+
+		return
+			livingEnemyCount < m_targetAliveCount &&
+			m_waveSpawnedCount < m_waveEnemyQuota &&
+			m_spawnCooldownSec <= 0.0f;
 	}
 }
