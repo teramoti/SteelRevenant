@@ -1,256 +1,287 @@
 //------------------------//------------------------
-// Contents(処理内容) 本編ゲームシーンの共通初期化と共有状態を実装する。
-//------------------------//------------------------
-// user(作成者) Keishi Teramoto
-// Created date(作成日) 2026 / 03 / 16
-// last updated (最終更新日) 2026 / 03 / 17
+// Contents(処理内容) ゲームメインシーンを実装する。全サブシステムを統合する。
+// 追加機能: ヒットストップ・スクリーンシェイク・ロックオンリング
+//           コンボポップアップ・ウェーブバナー・SlashHitEffect
 //------------------------//------------------------
 #include "GameScene.h"
+#include "../../Utility/DirectX11.h"
+#include "../../GameSystem/DrawManager.h"
+#include "../../GameSystem/InputManager.h"
+#include "../../Utility/Sound/AudioSystem.h"
+#include "../SceneManager/SceneManager.h"
 
-#include <d3d11.h>
-#include <DirectXMath.h>
-#include <DirectXColors.h>
-#include <Keyboard.h>
-#include <Mouse.h>
-#include <sstream>
-#include <iomanip>
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
 
-#include "../../GameSystem/InputManager.h"
-#include "../../GameSystem/DrawManager.h"
-#include "../../GameSystem/GameSaveData.h"
-#include "../../GameSystem/UiUtil.h"
-#include "../../Action/BattleRuleBook.h"
-#include "../../Utility/SimpleMathEx.h"
-#include "../SceneManager/SceneManager.h"
-#include "EnemyVisualProfile.h"
-#include "PlayerVisualProfile.h"
-
-using DirectX::SimpleMath::Color;
 using DirectX::SimpleMath::Matrix;
-using DirectX::SimpleMath::Vector2;
 using DirectX::SimpleMath::Vector3;
-
-extern void ExitGame();
+using DirectX::SimpleMath::Vector2;
 
 namespace
 {
-	constexpr float kCameraPitchMin = -0.75f;
-	constexpr float kCameraPitchMax = 0.35f;
-	constexpr float kAttackVisualDurationSec = 0.18f;
-	constexpr float kWeaponSwingYawRad = 1.45f;
-	constexpr float kWeaponSwingPitchRad = 1.15f;
-	constexpr float kPlayerRunCycleSpeed = 7.6f;
-	constexpr float kPlayerStrideRad = 0.38f;
-	constexpr float kEnemyBreathSpeed = 4.8f;
-	constexpr float kEnemySpawnDurationSec = 0.4f;
-	constexpr float kEnemyAttackWindupVisualSec = 0.45f;
-	constexpr float kMiniMapSizePx = 156.0f;
-	constexpr float kMiniMapMarginPx = 18.0f;
-	constexpr float kMiniMapMarkerEnemyPx = 2.6f;
-	constexpr float kMiniMapMarkerPlayerPx = 5.0f;
-	constexpr float kMiniMapPlayerHeadingPx = 9.0f;
-	constexpr float kFloorPulseSpeed = 1.6f;
-	constexpr float kFloorSweepSpeed = 0.42f;
-	constexpr float kCameraShakeSettleSec = 0.18f;
-	constexpr float kHitStopSecPerHit = 0.026f;
-	constexpr float kHitStopSecMax = 0.055f;
-	constexpr int kPauseMenuCount = 4;
-	constexpr float kPauseClickFxDurationSec = 0.24f;
-	constexpr float kStageIntroDurationSec = 1.15f;
+    constexpr float kGridCellSize = 1.0f;
+    constexpr int   kGridHalfExt  = 30;
+    constexpr float kCameraHeight = 12.0f;
+    constexpr float kCameraBack   = 10.0f;
+    constexpr float kHitstopSec   = 0.06f;
+    constexpr float kHitFlashSec  = 0.15f;
+    constexpr float kShakeOnHit   = 4.0f;
+    constexpr float kShakeOnKill  = 2.0f;
 }
 
-// ゲームシーンの共有参照と初期状態を構築する。
-GameScene::GameScene(SceneManager* scenemaneger)
-	: ActionSceneBase(scenemaneger, false)
-	, m_cameraPitch(-0.18f)
-	, m_sceneTime(0.0f)
-	, m_hitBloodTimer(0.0f)
-	, m_damageBloodTimer(0.0f)
-	, m_mouseSensitivityView(0.08f)
-	, m_attackAssistRangeView(2.6f)
-	, m_attackAssistDotView(0.30f)
-	, m_cameraShakeTimer(0.0f)
-	, m_cameraShakeStrength(0.0f)
-	, m_hitStopTimer(0.0f)
-	, m_isPaused(false)
-	, m_pauseSelectedIndex(0)
-	, m_pauseClickFxTimer(0.0f)
-	, m_pauseClickFxPos(Vector2::Zero)
-	, m_finishDelay(Action::BattleRuleBook::GetInstance().GetResultDelaySec())
-	, m_stageIntroTimer(0.0f)
-	, m_stageThemeIndex(1)
-	, m_resultPushed(false)
-	, m_showPathDebug(false)
-	, m_showHudDetail(false)
-	, m_speedUpTimer(0.0f)
-	, m_speedUpMultiplier(1.5f)
-	, m_isFinalized(false)
-{
-}
+SceneManager* g_sceneManager = nullptr;
 
-// ゲームシーンが保持する一時リソースを解放する。
-GameScene::~GameScene()
-{
-	Finalize();
-}
+GameScene::GameScene() = default;
 
-// 本編シーンの描画、戦闘、進行状態を初期化する。
 void GameScene::Initialize()
 {
-	m_isFinalized = false;
-	DirectX::Mouse::Get().SetMode(DirectX::Mouse::MODE_RELATIVE);
-	SetSystemCursorVisible(false);
+    DirectX11& dx = DirectX11::Get();
+    ID3D11Device*        device  = dx.GetDevice().Get();
+    ID3D11DeviceContext* context = dx.GetContext().Get();
 
-	int requestedStage = GameSaveData::GetInstance().GetStage();
-	if (requestedStage < 1 || requestedStage > 3)
-	{
-		requestedStage = 1;
-		GameSaveData::GetInstance().SetStageNum(1);
-	}
-	m_stageThemeIndex = requestedStage;
-	Action::BattleRuleBook::GetInstance().SetActiveStage(m_stageThemeIndex);
-	m_floorStyle = SceneFx::StageFloorStyleFactory::Create(m_stageThemeIndex);
+    m_stageIndex      = Action::BattleRuleBook::GetInstance().GetActiveStageIndex();
+    m_stageThemeIndex = m_stageIndex - 1;
+    m_sceneTime       = 0.0f;
 
-	m_survivalDirector.Reset();
-	m_gameState.Reset(Action::BattleRuleBook::GetInstance().GetStageStartTimeSec());
-	m_gameState.dangerLevel = m_survivalDirector.GetDangerLevel();
-	m_gameState.peakDangerLevel = m_survivalDirector.GetPeakDangerLevel();
-	m_player = Action::PlayerState();
-	switch (m_stageThemeIndex)
-	{
-	case 2:
-		m_player.position = Vector3(0.0f, 0.8f, 0.0f);
-		break;
-	case 3:
-		m_player.position = Vector3(0.0f, 0.8f, -8.0f);
-		break;
-	default:
-		m_player.position = Vector3(0.0f, 0.8f, -2.5f);
-		break;
-	}
-	m_enemies.clear();
+    // プリミティブメッシュ生成
+    m_floorMesh       = DirectX::GeometricPrimitive::CreateBox(context, {2.0f,0.15f,2.0f});
+    m_playerMesh      = DirectX::GeometricPrimitive::CreateBox(context, {0.32f,1.6f,0.32f});
+    m_enemyMesh       = DirectX::GeometricPrimitive::CreateBox(context, {0.30f,1.5f,0.30f});
+    m_weaponMesh      = DirectX::GeometricPrimitive::CreateCylinder(context, 1.0f, 0.06f, 8);
+    m_skyMesh         = DirectX::GeometricPrimitive::CreateSphere(context, 2.0f, 8, false);
+    m_effectOrbMesh   = DirectX::GeometricPrimitive::CreateSphere(context, 0.3f, 8);
+    m_effectTrailMesh = DirectX::GeometricPrimitive::CreateBox(context, {0.06f,0.06f,1.0f});
+    m_obstacleMesh    = DirectX::GeometricPrimitive::CreateBox(context, {1.0f,1.0f,1.0f});
 
-	m_resultPushed = false;
-	m_showPathDebug = false;
-	m_showHudDetail = false;
-	m_finishDelay = Action::BattleRuleBook::GetInstance().GetResultDelaySec();
-	m_mouseSensitivityView = System::InputManager::GetInstance().GetMouseSensitivity();
-	const Action::CombatTuning& tuning = m_combat.GetTuning();
-	m_attackAssistRangeView = tuning.attackAssistRangeDefault;
-	m_attackAssistDotView = tuning.attackAssistDotDefault;
-	m_combat.SetAttackAssistConfig(m_attackAssistRangeView, m_attackAssistDotView);
-	ResetTransientVisualState();
-	m_isPaused = false;
-	m_pauseSelectedIndex = 0;
-	m_pauseClickFxTimer = 0.0f;
-	m_pauseClickFxPos = Vector2::Zero;
-	m_stageIntroTimer = kStageIntroDurationSec;
+    m_floorStyle = CreateFloorStyle(m_stageIndex);
 
-	m_floorMesh        = DirectX::GeometricPrimitive::CreateCube(m_directX.GetContext().Get());
-	m_skyMesh          = DirectX::GeometricPrimitive::CreateSphere(m_directX.GetContext().Get(), 1.0f, 18);
-	// プレイヤー・敵の体幹は高解像度シリンダー（滑らかな人体シルエット）
-	m_playerMesh       = DirectX::GeometricPrimitive::CreateCylinder(m_directX.GetContext().Get(), 1.0f, 1.0f, 24);
-	m_enemyMesh        = DirectX::GeometricPrimitive::CreateSphere(m_directX.GetContext().Get(), 1.0f, 20);
-	// 両手大剣の刃身。
-	m_weaponMesh       = DirectX::GeometricPrimitive::CreateBox(m_directX.GetContext().Get(), DirectX::XMFLOAT3(0.20f, 1.68f, 0.020f));
-	m_obstacleMesh     = DirectX::GeometricPrimitive::CreateBox(m_directX.GetContext().Get(), DirectX::XMFLOAT3(1.0f, 1.0f, 1.0f));
-	m_effectOrbMesh    = DirectX::GeometricPrimitive::CreateSphere(m_directX.GetContext().Get(), 1.0f, 16);
-	// 斬撃トレイル: 薄い板（弧を描く軌跡に使う）
-	m_effectTrailMesh  = DirectX::GeometricPrimitive::CreateBox(m_directX.GetContext().Get(), DirectX::XMFLOAT3(1.0f, 0.04f, 1.0f));
-	m_debugCellMesh    = DirectX::GeometricPrimitive::CreateCube(m_directX.GetContext().Get(), 1.0f);
-	m_uiSolidTexture = UiUtil::CreateSolidTexture(m_directX.GetDevice().Get(), 0xffffffffu);
+    m_arena.Initialize(device, context, m_stageIndex);
+    m_arenaLayer.Initialize(device, context, m_stageIndex);
+    m_dropSystem.Initialize(device, context);
+    m_slashHitEffects.Reset();
 
-	SetupStage();
-	SpawnEnemyBatch(true);
-	m_gameState.score = ComputeStageScore();
-	Action::InputSnapshot initialInput = {};
-	UpdateCamera(0.0f, initialInput);
+    BuildPathGrid();
+
+    const float startTime = Action::BattleRuleBook::GetInstance().GetStageStartTimeSec();
+    m_gameState.Reset(startTime);
+    m_flow.Reset(startTime);
+
+    Action::BattleRuleBook::GetInstance().SetActiveStage(m_stageIndex);
+    m_director.Reset();
+    m_enemies.clear();
+    m_enemyPrevStates.clear();
+    m_obstacleWorlds.clear();
+
+    SpawnInitialEnemies();
+
+    m_player      = Action::PlayerState();
+    m_lockOnPulse = 0.0f;
+    (void)device;
 }
 
-// 入力とプレイヤー状態に応じてカメラを更新する。
-void GameScene::UpdateCamera(float dt, const Action::InputSnapshot& input)
+void GameScene::BuildPathGrid()
 {
-    m_cameraPitch = Utility::MathEx::Clamp(m_cameraPitch - input.mouseDelta.y * 0.03f, kCameraPitchMin, kCameraPitchMax);
+    const int   gridSize = kGridHalfExt * 2;
+    const float origin   = -static_cast<float>(kGridHalfExt);
+    m_pathGrid.Initialize(gridSize, gridSize, kGridCellSize,
+        DirectX::SimpleMath::Vector2(origin, origin));
+    m_arena.BuildPathGrid(m_pathGrid);
+    m_gridBuilt = true;
+}
 
-    m_proj = BuildPerspective(60.0f, 0.1f, 500.0f);
+void GameScene::SpawnInitialEnemies()
+{
+    const auto& spawnPts = m_arena.GetSpawnPoints();
+    if (spawnPts.empty()) return;
+    auto newEnemies = m_director.BuildInitialSpawn(spawnPts);
+    m_enemies.insert(m_enemies.end(), newEnemies.begin(), newEnemies.end());
+}
 
-    Vector3 target = m_player.position + Vector3(0.0f, 0.8f, 0.0f);
-    Vector3 forward(std::sin(m_player.yaw), std::sin(m_cameraPitch), std::cos(m_player.yaw));
-    forward.Normalize();
+void GameScene::ProcessSpawn()
+{
+    const int living = static_cast<int>(std::count_if(m_enemies.begin(), m_enemies.end(),
+        [](const Action::EnemyState& e){ return e.state != Action::EnemyStateType::Dead; }));
+    auto batch = m_director.BuildSpawnBatch(m_arena.GetSpawnPoints(), living);
+    if (!batch.empty())
+        m_enemies.insert(m_enemies.end(), batch.begin(), batch.end());
+}
 
-    if (m_player.lockEnemyIndex >= 0 && m_player.lockEnemyIndex < static_cast<int>(m_enemies.size()))
+void GameScene::UpdateScore(float dt)
+{
+    m_gameState.score = m_gameState.killCount * 100
+        + static_cast<int>(m_gameState.survivalTimeSec) * 2
+        + m_gameState.peakDangerLevel * 50;
+    (void)dt;
+}
+
+void GameScene::Update(const DX::StepTimer& timer)
+{
+    const float dt = static_cast<float>(timer.GetElapsedSeconds());
+
+    m_sceneTime  += dt;
+    m_hud.Update(dt);
+    m_lockOnPulse += dt;
+    m_slashHitEffects.Update(dt);
+    if (m_hitFlashTimer > 0.0f) m_hitFlashTimer -= dt;
+
+    if (m_hitstopTimer > 0.0f)
     {
-        const Action::EnemyState& lockEnemy = m_enemies[static_cast<size_t>(m_player.lockEnemyIndex)];
-        if (lockEnemy.state != Action::EnemyStateType::Dead)
+        m_hitstopTimer -= dt;
+        UpdateCamera();
+        return;
+    }
+
+    m_flow.Update(dt, m_gameState.IsFinished());
+
+    if (m_flow.GetPhase() == BattlePhase::Battle)
+        UpdateBattle(dt);
+
+    UpdateCamera();
+    UpdateScore(dt);
+
+    if (m_flow.IsReadyToExit())
+    {
+        if (g_sceneManager) g_sceneManager->RequestTransition(RESULT_SCENE);
+    }
+}
+
+void GameScene::UpdateBattle(float dt)
+{
+    m_gameState.Tick(dt);
+
+    const System::InputManager& input = System::InputManager::GetInstance();
+    const Vector2 mouseDelta = input.GetMouseDelta();
+
+    const Vector3 camFwd   = Vector3::Transform(Vector3(0,0,1), Matrix::CreateRotationY(m_player.yaw));
+    const Vector3 camRight = Vector3::Transform(Vector3(1,0,0), Matrix::CreateRotationY(m_player.yaw));
+
+    Action::InputSnapshot snap;
+    snap.dt           = dt;
+    snap.mouseDelta   = mouseDelta;
+    snap.moveForward  = input.IsKeyDown(DirectX::Keyboard::W);
+    snap.moveBack     = input.IsKeyDown(DirectX::Keyboard::S);
+    snap.moveLeft     = input.IsKeyDown(DirectX::Keyboard::A);
+    snap.moveRight    = input.IsKeyDown(DirectX::Keyboard::D);
+    snap.attackPressed= input.IsMouseButtonPressed(0);
+    snap.guardHeld    = input.IsMouseButtonDown(1);
+    snap.lockTogglePressed = input.IsKeyPressed(DirectX::Keyboard::Tab);
+
+    if (snap.lockTogglePressed)
+    {
+        m_player.lockEnemyIndex = (m_player.lockEnemyIndex >= 0)
+            ? -1
+            : m_combat.FindNearestEnemy(m_enemies, m_player.position, 15.0f);
+    }
+
+    const int prevKill = m_gameState.killCount;
+    m_combat.UpdatePlayer(m_player, snap, camFwd, camRight, m_gameState);
+    m_combat.ResolvePlayerAttack(m_player, m_enemies, m_gameState);
+
+    // ヒット時: SlashHitEffect + ヒットストップ + シェイク + コンボポップアップ
+    if (m_player.attackPhase == Action::PlayerAttackPhase::Active)
+    {
+        for (size_t i = 0; i < m_enemies.size(); ++i)
         {
-            const Vector3 enemyPos = lockEnemy.position + Vector3(0.0f, 0.8f, 0.0f);
-            target = (target + enemyPos) * 0.5f;
-            Vector3 dir = target - m_player.position;
-            if (dir.LengthSquared() > 0.0001f)
+            if (m_enemies[i].hitByCurrentSwing && m_enemies[i].state != Action::EnemyStateType::Dead)
             {
-                dir.Normalize();
-                forward = dir;
+                m_slashHitEffects.Spawn(m_enemies[i].position, m_player.yaw,
+                    DirectX::SimpleMath::Color(1.0f, 0.7f, 0.2f, 1.0f));
+                m_hitstopTimer = kHitstopSec;
+                m_hud.TriggerScreenShake(kShakeOnKill);
+                m_hud.TriggerComboPopup(m_player.comboIndex, m_player.comboLevel);
+                break;
             }
         }
     }
 
-    Vector3 cameraPos = m_player.position - Vector3(forward.x, 0.0f, forward.z) * 6.0f + Vector3(0.0f, 3.2f, 0.0f);
+    if (m_gameState.killCount > prevKill)
+        m_hud.TriggerScreenShake(kShakeOnKill);
 
-    if (m_cameraShakeTimer > 0.0f && m_cameraShakeStrength > 0.0f)
+    if (m_player.damageGraceTimer > 0.0f && m_hitFlashTimer <= 0.0f)
     {
-        const float shakeFade = Utility::MathEx::Clamp(m_cameraShakeTimer / kCameraShakeSettleSec, 0.0f, 1.0f);
-        const float amp = m_cameraShakeStrength * (0.04f + shakeFade * 0.05f);
-        const float t = m_sceneTime + dt * 0.5f;
-        const Vector3 shakeOffset(
-            std::sinf(t * 37.0f) * amp,
-            std::cosf(t * 53.0f) * amp * 0.72f,
-            std::sinf(t * 29.0f + 1.2f) * amp * 0.45f);
-        cameraPos += shakeOffset;
-        target += shakeOffset * 0.2f;
+        m_hitFlashTimer = kHitFlashSec;
+        m_hud.TriggerScreenShake(kShakeOnHit);
     }
 
-    m_view = Matrix::CreateLookAt(cameraPos, target, Vector3::Up);
+    const int living = static_cast<int>(std::count_if(m_enemies.begin(), m_enemies.end(),
+        [](const Action::EnemyState& e){ return e.state != Action::EnemyStateType::Dead; }));
+
+    m_director.Update(dt, m_gameState.killCount, m_gameState.survivalTimeSec, living);
+    m_gameState.dangerLevel     = m_director.GetDangerLevel();
+    m_gameState.peakDangerLevel = m_director.GetPeakDangerLevel();
+
+    static int s_prevWave = 1;
+    if (m_director.GetCurrentWave() != s_prevWave)
+    {
+        s_prevWave = m_director.GetCurrentWave();
+        m_hud.TriggerWaveBanner(s_prevWave, m_director.GetTotalWaveCount());
+        GameAudio::AudioSystem::GetInstance().PlaySe(GameAudio::SeId::WaveClear, 0.8f);
+    }
+
+    if (m_director.IsCompleted()) m_gameState.stageCleared = true;
+
+    m_combat.UpdateEnemies(m_enemies, m_player, snap, m_pathGrid, m_aStar, m_gameState);
+    ProcessSpawn();
+
+    m_arenaLayer.UpdateSpeedUpItems(m_player, m_combat, dt);
+    m_dropSystem.ProcessEnemyDrops(m_enemies, m_enemyPrevStates);
+    m_dropSystem.UpdateDropItems(m_player, m_gameState, dt);
 }
 
-// 本編シーンのワールド描画と UI 描画を実行する。
+void GameScene::UpdateCamera()
+{
+    const float yaw = m_player.yaw;
+    const Vector3 back(-std::sin(yaw)*kCameraBack, kCameraHeight, -std::cos(yaw)*kCameraBack);
+    const Vector2 shake = m_hud.GetShakeOffset();
+
+    m_cameraPos    = m_player.position + back + Vector3(shake.x*0.05f, shake.y*0.05f, 0.0f);
+    m_cameraTarget = m_player.position + Vector3(0.0f, 0.8f, 0.0f);
+    m_view         = Matrix::CreateLookAt(m_cameraPos, m_cameraTarget, Vector3::Up);
+
+    const DirectX11& dx = DirectX11::Get();
+    const float aspect  = static_cast<float>(dx.GetWidth()) / static_cast<float>(std::max(1, dx.GetHeight()));
+    m_proj       = Matrix::CreatePerspectiveFieldOfView(DirectX::XM_PI/4.0f, aspect, 0.1f, 1000.0f);
+    m_projection = m_proj;
+}
+
 void GameScene::Render()
 {
+    // Visual/ サブファイルへ委譲
     DrawWorld();
-    DrawUI();
+
+    // HUD
+    if (m_spriteBatch && m_font)
+    {
+        m_hud.Render(m_gameState, m_player, m_director,
+            m_arenaLayer.IsSpeedActive(), m_arenaLayer.GetSpeedRemaining(),
+            DirectX11::Get().GetWidth(), DirectX11::Get().GetHeight());
+    }
+
+    // カウントダウン
+    if (m_flow.GetPhase() == BattlePhase::Countdown && m_font && m_spriteBatch)
+    {
+        const int cnt = static_cast<int>(m_flow.GetCountdownTimer()) + 1;
+        wchar_t buf[8]; swprintf_s(buf, L"%d", cnt);
+        const float cx = static_cast<float>(DirectX11::Get().GetWidth())  * 0.5f - 20.0f;
+        const float cy = static_cast<float>(DirectX11::Get().GetHeight()) * 0.5f - 30.0f;
+        m_font->DrawString(m_spriteBatch, buf,
+            DirectX::XMFLOAT2(cx, cy), DirectX::Colors::White, 0.0f,
+            DirectX::XMFLOAT2(0,0), 2.5f);
+    }
 }
 
-// 残り時間を MM:SS 形式の文字列へ整形する。
-std::wstring GameScene::BuildTimerMMSS(float seconds) const
+void GameScene::Finalize()
 {
-    const float safeSeconds = std::max(0.0f, seconds);
-    const int totalSeconds = static_cast<int>(std::ceil(safeSeconds - 0.0001f));
-    const int minutes = totalSeconds / 60;
-    const int remainSeconds = totalSeconds % 60;
-
-    std::wstringstream ss;
-    ss << std::setfill(L'0') << std::setw(2) << minutes << L":" << std::setw(2) << remainSeconds;
-    return ss.str();
-}
-
-// 単色矩形を UI 描画用に描く。
-void GameScene::DrawSolidRect(
-    DirectX::SpriteBatch* batch,
-    const Vector2& position,
-    const Vector2& size,
-    const Color& color) const
-{
-	if (batch == nullptr || m_uiSolidTexture == nullptr)
-	{
-		return;
-	}
-	if (size.x <= 0.0f || size.y <= 0.0f)
-	{
-		return;
-	}
-
-	const DirectX::XMFLOAT2 scale(size.x, size.y);
-	batch->Draw(m_uiSolidTexture.Get(), position, nullptr, color, 0.0f, Vector2::Zero, scale);
+    m_enemies.clear();
+    m_enemyPrevStates.clear();
+    m_obstacleWorlds.clear();
+    m_slashHitEffects.Reset();
+    m_floorMesh.reset();
+    m_playerMesh.reset();
+    m_enemyMesh.reset();
+    m_weaponMesh.reset();
+    m_skyMesh.reset();
+    m_effectOrbMesh.reset();
+    m_effectTrailMesh.reset();
+    m_obstacleMesh.reset();
 }

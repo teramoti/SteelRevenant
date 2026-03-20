@@ -1,63 +1,23 @@
-﻿//------------------------//------------------------
-// Contents(処理内容) リザルト画面の更新と描画処理を宣言する。
-//------------------------//------------------------
-// user(作成者) Keishi Teramoto
-// Created date(作成日) 2026 / 03 / 16
-// last updated (最終更新日) 2026 / 03 / 17
-//------------------------//------------------------
 #pragma once
-
-//-----------------------------------------------------------------------------
-// ResultScene
-//-----------------------------------------------------------------------------
-// 新アクションステージの結果表示シーン。
-// - 戦績サマリー表示
-// - キーボード/マウスの両操作で遷移
-//-----------------------------------------------------------------------------
-
-#include "../Base/ActionSceneBase.h"
-
-#include <memory>
-#include <wrl/client.h>
-#include <d3d11.h>
-#include <SimpleMath.h>
+#include "../IScene.h"
 #include <SpriteBatch.h>
+#include <SpriteFont.h>
+#include "../../Action/GameState.h"
 
-class ResultScene : public ActionSceneBase
+class ResultScene : public IScene
 {
 public:
-	// ResultScene を生成する。
-	ResultScene(SceneManager* scenemaneger);
-	// 終了時に保持リソースを解放する。
-	~ResultScene();
+    void Initialize() override;
+    void Update(const DX::StepTimer& timer) override;
+    void Render()  override;
+    void Finalize() override;
 
-public:
-	// 結果表示に必要な状態と資産を初期化する。
-	void Initialize() override;
-	// 入力を処理し、遷移先を更新する。
-	void Update(const DX::StepTimer& stepTimer) override;
-	// 結果UIを描画する。
-	void Render() override;
-	// 確保済みリソースを破棄する。
-	void Finalize() override;
+    // GameScene から結果を受け取る（グローバル経由）
+    static Action::GameState s_lastResult;
 
 private:
-	// SpriteBatch上に単色矩形を描画する。
-	void DrawSolidRect(
-		DirectX::SpriteBatch* batch,
-		const DirectX::SimpleMath::Vector2& position,
-		const DirectX::SimpleMath::Vector2& size,
-		const DirectX::SimpleMath::Color& color) const;
-
-private:
-	float m_elapsed;
-	// 結果画面メニューの選択インデックス。
-	int m_selectedItem;
-	// クリック演出の残り時間。
-	float m_clickFxTimer;
-	// クリック演出の中心座標。
-	DirectX::SimpleMath::Vector2 m_clickFxPos;
-	// UI矩形描画用1x1白テクスチャ。
-	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_uiSolidTexture;
+    float m_timer     = 0.0f;
+    float m_exitTimer = 5.0f;
+    DirectX::SpriteBatch* m_spriteBatch = nullptr;
+    DirectX::SpriteFont*  m_font        = nullptr;
 };
-

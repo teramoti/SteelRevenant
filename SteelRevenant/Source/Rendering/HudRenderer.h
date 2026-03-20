@@ -31,7 +31,7 @@
 
 #include "../Core/Combat/CombatTypes.h"
 #include "../Core/Combat/GameState.h"
-#include "../Stage/ArenaObjective.h"
+// Bug#4修正: ArenaObjective (中継地点・ハザード・ビーコン) は削除済みのため参照を除去
 
 namespace System { class UIShaderText; struct UIShaderStyle; }
 
@@ -61,8 +61,7 @@ namespace Rendering
             float damageBloodTimer = 0.0f;              ///< 被ダメ血しぶきタイマー (0-1)
             float stageIntroTimer = 0.0f;               ///< ステージイントロタイマー (秒)
 
-            // アリーナ目標
-            const Stage::ArenaObjective* objective = nullptr;  ///< アリーナ目標情報
+            // アリーナ目標（Bug#4修正: ArenaObjective 削除済み、フィールド除去）
 
             // 敵情報（ミニマップ用）
             const std::vector<Core::EnemyState>* enemies = nullptr;

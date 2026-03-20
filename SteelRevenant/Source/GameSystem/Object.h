@@ -1,10 +1,11 @@
-﻿//------------------------//------------------------
+//------------------------//------------------------
 // Contents(処理内容) 3Dオブジェクト基底クラスの更新と描画処理を宣言する。
 //------------------------//------------------------
 // user(作成者) Keishi Teramoto
 // Created date(作成日) 2026 / 03 / 16
 // last updated (最終更新日) 2026 / 03 / 17
 //------------------------//------------------------
+#pragma once
 #include <windows.h>
 #include <wrl/client.h>
 #include <Effects.h>
@@ -17,7 +18,6 @@
 // 既存カメラ型への参照依存
 #include "Camera.h"
 #include "../Utility/DirectX11.h"
-#pragma once
 //オブジェクト3Dクラス
 namespace Teramoto
 {

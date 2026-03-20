@@ -12,33 +12,27 @@ namespace System
     public:
         void Update(
             const DirectX::Keyboard::State*                kb,
-            const DirectX::Keyboard::KeyboardStateTracker* kbTracker,
+            const DirectX::Keyboard::KeyboardStateTracker* kbT,
             const DirectX::Mouse::State*                   ms,
-            const DirectX::Mouse::ButtonStateTracker*      msTracker);
+            const DirectX::Mouse::ButtonStateTracker*      msT);
 
-        void SetMouseSensitivity(float s) { m_sensitivity = s; }
-        float GetMouseSensitivity()  const { return m_sensitivity; }
+        void  SetMouseSensitivity(float s) { m_sensitivity = s; }
+        float GetMouseSensitivity() const  { return m_sensitivity; }
 
-        bool IsKeyDown(DirectX::Keyboard::Keys key)      const;
-        bool IsKeyPressed(DirectX::Keyboard::Keys key)   const;
-        bool IsKeyReleased(DirectX::Keyboard::Keys key)  const;
-
-        // 0=Left 1=Right 2=Mid
-        bool IsMouseButtonDown(int button)    const;
-        bool IsMouseButtonPressed(int button) const;
-
-        // 感度補正済みマウス移動量（ピクセル/フレーム）
-        DirectX::SimpleMath::Vector2 GetMouseDelta() const { return m_mouseDelta; }
+        bool IsKeyDown(DirectX::Keyboard::Keys key)     const;
+        bool IsKeyPressed(DirectX::Keyboard::Keys key)  const;
+        bool IsKeyReleased(DirectX::Keyboard::Keys key) const;
+        bool IsMouseButtonDown(int btn)    const;
+        bool IsMouseButtonPressed(int btn) const;
+        DirectX::SimpleMath::Vector2 GetMouseDelta() const { return m_delta; }
 
     private:
         InputManager() = default;
-
-        const DirectX::Keyboard::State*                m_kb        = nullptr;
-        const DirectX::Keyboard::KeyboardStateTracker* m_kbTracker = nullptr;
-        const DirectX::Mouse::State*                   m_ms        = nullptr;
-        const DirectX::Mouse::ButtonStateTracker*      m_msTracker = nullptr;
-
-        DirectX::SimpleMath::Vector2 m_mouseDelta;
+        const DirectX::Keyboard::State*                m_kb  = nullptr;
+        const DirectX::Keyboard::KeyboardStateTracker* m_kbT = nullptr;
+        const DirectX::Mouse::State*                   m_ms  = nullptr;
+        const DirectX::Mouse::ButtonStateTracker*      m_msT = nullptr;
+        DirectX::SimpleMath::Vector2 m_delta;
         float m_sensitivity = 0.5f;
     };
 }

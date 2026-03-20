@@ -18,6 +18,9 @@
 #include <filesystem>
 #include <vector>
 
+// シーンからの遷移要求を受け付けるグローバルポインタ（GameScene.cpp で定義）
+extern SceneManager* g_sceneManager;
+
 void ExitGame();
 
 namespace
@@ -112,6 +115,7 @@ void Game::Initialize()
 
     // シーン管理を初期化してタイトルシーンを開始する。
     m_sceneManager = std::make_unique<SceneManager>();
+    g_sceneManager = m_sceneManager.get();  // シーンからの遷移要求用グローバルを接続
     m_sceneManager->SetScene(TITLE_SCENE);
     m_sceneManager->InitilizeActiveScene();
 }
@@ -212,6 +216,7 @@ void Game::Finalize()
     {
         m_sceneManager->FinalizeActiveScene();
         m_sceneManager.reset();
+        g_sceneManager = nullptr;
     }
 
     GameAudio::AudioSystem::GetInstance().Shutdown();

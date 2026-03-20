@@ -1,17 +1,10 @@
 //------------------------//------------------------
 // Contents(処理内容) 効果音の読み込みと再生を実装する。
-//------------------------//------------------------
-// user(作成者) Keishi Teramoto
-// Created date(作成日) 2026 / 03 / 16
-// last updated (最終更新日) 2026 / 03 / 20
+// DirectXTK Audio が存在しない場合は無音で継続する。
 //------------------------//------------------------
 #include "AudioSystem.h"
-
 #include <filesystem>
-#include <vector>
 
-// DirectXTK Audio が利用可能かどうかを確認する。
-// Audio.h が存在する場合のみ有効化する（プロジェクト設定依存）。
 #if __has_include(<Audio.h>)
 #define AUDIO_ENABLED 1
 #include <Audio.h>
@@ -28,129 +21,75 @@ namespace GameAudio
         bool active = false;
     };
 
-    AudioSystem::AudioSystem()
-        : m_impl(std::make_unique<Impl>())
-    {
-    }
+    AudioSystem::AudioSystem() : m_impl(std::make_unique<Impl>()) {}
 
-    // 音声ルートディレクトリを指定して AudioEngine を初期化する。
-    void AudioSystem::Initialize(const std::wstring& audioRootPath)
+    void AudioSystem::Initialize(const std::wstring& root)
     {
-        m_audioRoot    = audioRootPath;
-        m_initialized  = false;
-
 #if AUDIO_ENABLED
         try
         {
-            DirectX::AUDIO_ENGINE_FLAGS flags = DirectX::AudioEngine_Default;
-#ifdef _DEBUG
-            flags |= DirectX::AudioEngine_Debug;
-#endif
-            m_impl->engine = std::make_unique<DirectX::AudioEngine>(flags);
+            m_impl->engine = std::make_unique<DirectX::AudioEngine>(DirectX::AudioEngine_Default);
             m_impl->active = true;
-
-            // 効果音をあらかじめロードしておく。
             namespace fs = std::filesystem;
-            const fs::path root(audioRootPath);
-
-            for (int id = 0; id < static_cast<int>(SeId::Count); ++id)
+            for (int i = 0; i < static_cast<int>(SeId::Count); ++i)
             {
-                const wchar_t* fname = GetFileName(static_cast<SeId>(id));
-                if (!fname) continue;
-
-                const fs::path filePath = root / fname;
-                if (!fs::exists(filePath)) continue;
-
-                try
-                {
-                    m_impl->effects[id] = std::make_unique<DirectX::SoundEffect>(
-                        m_impl->engine.get(), filePath.wstring().c_str());
-                }
-                catch (...) { /* ファイルが壊れている場合は無視して続行 */ }
+                const wchar_t* f = GetFileName(static_cast<SeId>(i));
+                if (!f) continue;
+                fs::path p = fs::path(root) / f;
+                if (!fs::exists(p)) continue;
+                try { m_impl->effects[i] = std::make_unique<DirectX::SoundEffect>(m_impl->engine.get(), p.wstring().c_str()); }
+                catch (...) {}
             }
-            m_initialized = true;
         }
-        catch (...) { /* Audio 初期化失敗時は無音で続行 */ }
+        catch (...) {}
+#else
+        (void)root;
 #endif
     }
 
-    // AudioEngine を毎フレーム更新する。
     void AudioSystem::Update()
     {
 #if AUDIO_ENABLED
-        if (m_impl->active && m_impl->engine)
-        {
-            if (!m_impl->engine->Update())
-            {
-                // デバイスロスト: 再初期化を試みる。
-                if (m_impl->engine->IsCriticalError())
-                {
-                    m_impl->engine->Reset();
-                }
-            }
-        }
+        if (m_impl->active && m_impl->engine) m_impl->engine->Update();
 #endif
     }
 
-    // 指定効果音を音量付きで再生する。
     void AudioSystem::PlaySe(SeId id, float volume)
     {
 #if AUDIO_ENABLED
         if (!m_impl->active || !m_impl->engine) return;
-
-        const int key = static_cast<int>(id);
-        auto it = m_impl->effects.find(key);
+        auto it = m_impl->effects.find(static_cast<int>(id));
         if (it == m_impl->effects.end() || !it->second) return;
-
-        const float finalVolume = volume * m_volumeSettings.se * m_volumeSettings.master;
-        it->second->Play(finalVolume, 0.0f, 0.0f);
+        it->second->Play(volume * m_vol.se * m_vol.master, 0.0f, 0.0f);
 #else
         (void)id; (void)volume;
 #endif
     }
 
-    // 音量設定を適用する。
-    void AudioSystem::ApplyVolumeSettings(const AudioVolumeSettings& settings)
+    void AudioSystem::ApplyVolumeSettings(const AudioVolumeSettings& s)
     {
-        m_volumeSettings = settings;
+        m_vol = s;
 #if AUDIO_ENABLED
-        if (m_impl->active && m_impl->engine)
-        {
-            m_impl->engine->SetMasterVolume(settings.master);
-        }
+        if (m_impl->active && m_impl->engine) m_impl->engine->SetMasterVolume(s.master);
 #endif
     }
 
-    // 全音声を一時停止する。
-    void AudioSystem::SuspendAll()
-    {
+    void AudioSystem::SuspendAll() {
 #if AUDIO_ENABLED
-        if (m_impl->active && m_impl->engine)
-            m_impl->engine->Suspend();
+        if (m_impl->active && m_impl->engine) m_impl->engine->Suspend();
+#endif
+    }
+    void AudioSystem::ResumeAll()  {
+#if AUDIO_ENABLED
+        if (m_impl->active && m_impl->engine) m_impl->engine->Resume();
+#endif
+    }
+    void AudioSystem::Shutdown()   {
+#if AUDIO_ENABLED
+        m_impl->effects.clear(); m_impl->engine.reset(); m_impl->active = false;
 #endif
     }
 
-    // 全音声を再開する。
-    void AudioSystem::ResumeAll()
-    {
-#if AUDIO_ENABLED
-        if (m_impl->active && m_impl->engine)
-            m_impl->engine->Resume();
-#endif
-    }
-
-    // リソースを解放する。
-    void AudioSystem::Shutdown()
-    {
-#if AUDIO_ENABLED
-        m_impl->effects.clear();
-        m_impl->engine.reset();
-        m_impl->active = false;
-#endif
-        m_initialized = false;
-    }
-
-    // SeId に対応するファイル名を返す。
     const wchar_t* AudioSystem::GetFileName(SeId id)
     {
         switch (id)
