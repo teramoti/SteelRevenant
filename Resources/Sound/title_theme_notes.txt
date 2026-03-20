@@ -1,5 +1,0 @@
-Steel Revenant 用タイトルBGM
-- 雰囲気: 近未来 / 硬質 / 少しダーク
-- 想定シーン: Title
-- 形式: WAV 44.1kHz 16-bit mono
-- 長さ: 約 41.74 秒
