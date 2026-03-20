@@ -1,0 +1,28 @@
+Steel Revenant 追加BGMパック
+
+収録:
+- stage_select.wav
+- defense_corridor.wav
+- core_sector.wav
+- result_clear.wav
+- result_fail.wav
+
+形式:
+- WAV
+- 44.1kHz
+- 16-bit
+- mono
+
+想定:
+- stage_select: ステージ選択
+- defense_corridor: 防衛回廊
+- core_sector: 中央区画中枢
+- result_clear: クリア結果
+- result_fail: 失敗結果
+
+長さ:
+- stage_select.wav: 38.40 sec
+- defense_corridor.wav: 48.81 sec
+- core_sector.wav: 46.45 sec
+- result_clear.wav: 3.20 sec
+- result_fail.wav: 2.60 sec
