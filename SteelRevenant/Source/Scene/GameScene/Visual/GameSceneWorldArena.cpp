@@ -41,14 +41,38 @@ void GameScene::DrawWorldArena()
 
 	m_floorMesh->Draw(floorWorld, m_view, m_proj, StageTint(floorPalette.baseColor));
 
-	const Matrix floorTopWorld = Matrix::CreateScale(54.0f, 0.05f, 54.0f) * Matrix::CreateTranslation(0.0f, 0.02f, 0.0f);
-	m_floorMesh->Draw(floorTopWorld, m_view, m_proj, StageTint(floorPalette.topColor));
-	const Matrix floorPanelWorld = Matrix::CreateScale(50.0f, 0.025f, 50.0f) * Matrix::CreateTranslation(0.0f, 0.055f, 0.0f);
-	const Matrix floorSeamXWorld = Matrix::CreateScale(0.12f, 0.018f, 42.0f) * Matrix::CreateTranslation(0.0f, 0.08f, 0.0f);
-	const Matrix floorSeamZWorld = Matrix::CreateScale(42.0f, 0.018f, 0.12f) * Matrix::CreateTranslation(0.0f, 0.08f, 0.0f);
-	m_obstacleMesh->Draw(floorPanelWorld, m_view, m_proj, StageTint(floorPalette.panelColor));
-	m_obstacleMesh->Draw(floorSeamXWorld, m_view, m_proj, StageTint(floorPalette.seamColor));
-	m_obstacleMesh->Draw(floorSeamZWorld, m_view, m_proj, StageTint(floorPalette.seamColor));
+	// 床面レイヤー1: ベースパネル
+	m_floorMesh->Draw(
+		Matrix::CreateScale(54.0f, 0.05f, 54.0f) * Matrix::CreateTranslation(0.0f, 0.02f, 0.0f),
+		m_view, m_proj, StageTint(floorPalette.topColor));
+
+	// 床面レイヤー2: 光沢パネル
+	m_obstacleMesh->Draw(
+		Matrix::CreateScale(50.0f, 0.025f, 50.0f) * Matrix::CreateTranslation(0.0f, 0.055f, 0.0f),
+		m_view, m_proj, StageTint(floorPalette.panelColor));
+
+	// グリッドライン (5m間隔 縦横各11本) - 奥行き感を生む
+	const Color gridColor = StageTint(Color(
+		floorPalette.seamColor.R(), floorPalette.seamColor.G(),
+		floorPalette.seamColor.B(), 0.72f));
+	const Color gridGlowColor = StageTint(Color(
+		floorPalette.accentColor.R(), floorPalette.accentColor.G(),
+		floorPalette.accentColor.B(), 0.45f + floorPulse * 0.20f));
+	for (int gi = -5; gi <= 5; ++gi)
+	{
+		const float gf = static_cast<float>(gi) * 5.0f;
+		m_obstacleMesh->Draw(Matrix::CreateScale(50.0f, 0.012f, 0.07f) * Matrix::CreateTranslation(0.0f, 0.068f, gf), m_view, m_proj, gridColor);
+		m_obstacleMesh->Draw(Matrix::CreateScale(0.07f, 0.012f, 50.0f) * Matrix::CreateTranslation(gf, 0.068f, 0.0f), m_view, m_proj, gridColor);
+	}
+	// 中央十字アクセントライン
+	m_obstacleMesh->Draw(Matrix::CreateScale(50.0f, 0.016f, 0.18f) * Matrix::CreateTranslation(0.0f, 0.072f, 0.0f), m_view, m_proj, gridGlowColor);
+	m_obstacleMesh->Draw(Matrix::CreateScale(0.18f, 0.016f, 50.0f) * Matrix::CreateTranslation(0.0f, 0.072f, 0.0f), m_view, m_proj, gridGlowColor);
+	// 外周リング（アリーナ境界）
+	const Color rimColor = StageTint(Color(floorPalette.accentColor.R(), floorPalette.accentColor.G(), floorPalette.accentColor.B(), 0.55f + floorPulse * 0.25f));
+	m_obstacleMesh->Draw(Matrix::CreateScale(52.0f, 0.022f, 0.22f) * Matrix::CreateTranslation(0.0f, 0.075f, -26.0f), m_view, m_proj, rimColor);
+	m_obstacleMesh->Draw(Matrix::CreateScale(52.0f, 0.022f, 0.22f) * Matrix::CreateTranslation(0.0f, 0.075f,  26.0f), m_view, m_proj, rimColor);
+	m_obstacleMesh->Draw(Matrix::CreateScale(0.22f, 0.022f, 52.0f) * Matrix::CreateTranslation(-26.0f, 0.075f, 0.0f), m_view, m_proj, rimColor);
+	m_obstacleMesh->Draw(Matrix::CreateScale(0.22f, 0.022f, 52.0f) * Matrix::CreateTranslation( 26.0f, 0.075f, 0.0f), m_view, m_proj, rimColor);
 
 	std::vector<SceneFx::FloorDrawCommand> floorDetailCommands;
 	floorDetailCommands.reserve(128);

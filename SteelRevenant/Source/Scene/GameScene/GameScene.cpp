@@ -154,15 +154,18 @@ void GameScene::Initialize()
 	m_objectiveBannerTimer = kObjectiveBannerDurationSec;
 	m_objectiveBannerText = Action::BattleRuleBook::GetInstance().GetActiveRule().missionSummary;
 
-	m_floorMesh = DirectX::GeometricPrimitive::CreateCube(m_directX.GetContext().Get());
-	m_skyMesh = DirectX::GeometricPrimitive::CreateSphere(m_directX.GetContext().Get(), 1.0f, 18);
-	m_playerMesh = DirectX::GeometricPrimitive::CreateCylinder(m_directX.GetContext().Get(), 1.2f, 0.9f, 18);
-	m_enemyMesh = DirectX::GeometricPrimitive::CreateSphere(m_directX.GetContext().Get(), 1.1f, 16);
-	m_weaponMesh = DirectX::GeometricPrimitive::CreateBox(m_directX.GetContext().Get(), DirectX::XMFLOAT3(0.09f, 1.48f, 0.14f));
-	m_obstacleMesh = DirectX::GeometricPrimitive::CreateBox(m_directX.GetContext().Get(), DirectX::XMFLOAT3(1.0f, 1.0f, 1.0f));
-	m_effectOrbMesh = DirectX::GeometricPrimitive::CreateSphere(m_directX.GetContext().Get(), 1.0f, 16);
-	m_effectTrailMesh = DirectX::GeometricPrimitive::CreateSphere(m_directX.GetContext().Get(), 1.0f, 12);
-	m_debugCellMesh = DirectX::GeometricPrimitive::CreateCube(m_directX.GetContext().Get(), 1.0f);
+	m_floorMesh        = DirectX::GeometricPrimitive::CreateCube(m_directX.GetContext().Get());
+	m_skyMesh          = DirectX::GeometricPrimitive::CreateSphere(m_directX.GetContext().Get(), 1.0f, 18);
+	// プレイヤー・敵の体幹は高解像度シリンダー（滑らかな人体シルエット）
+	m_playerMesh       = DirectX::GeometricPrimitive::CreateCylinder(m_directX.GetContext().Get(), 1.0f, 1.0f, 24);
+	m_enemyMesh        = DirectX::GeometricPrimitive::CreateSphere(m_directX.GetContext().Get(), 1.0f, 20);
+	// 剣刃: 薄い長方形（幅広で刃らしいシルエット）
+	m_weaponMesh       = DirectX::GeometricPrimitive::CreateBox(m_directX.GetContext().Get(), DirectX::XMFLOAT3(0.22f, 1.44f, 0.022f));
+	m_obstacleMesh     = DirectX::GeometricPrimitive::CreateBox(m_directX.GetContext().Get(), DirectX::XMFLOAT3(1.0f, 1.0f, 1.0f));
+	m_effectOrbMesh    = DirectX::GeometricPrimitive::CreateSphere(m_directX.GetContext().Get(), 1.0f, 16);
+	// 斬撃トレイル: 薄い板（弧を描く軌跡に使う）
+	m_effectTrailMesh  = DirectX::GeometricPrimitive::CreateBox(m_directX.GetContext().Get(), DirectX::XMFLOAT3(1.0f, 0.04f, 1.0f));
+	m_debugCellMesh    = DirectX::GeometricPrimitive::CreateCube(m_directX.GetContext().Get(), 1.0f);
 	m_uiSolidTexture = UiUtil::CreateSolidTexture(m_directX.GetDevice().Get(), 0xffffffffu);
 
 	SetupStage();
