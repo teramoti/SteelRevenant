@@ -110,16 +110,10 @@
     <ClInclude Include="Source\Scene\GameScene\GameScene.h">
       <Filter>Scene\GameScene</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Scene\GameScene\EnemyVisualProfile.h">
-      <Filter>Scene\GameScene</Filter>
-    </ClInclude>
     <ClInclude Include="Source\Scene\GameScene\StageFloorStyle.h">
       <Filter>Scene\GameScene</Filter>
     </ClInclude>
     <ClInclude Include="Source\Scene\GameScene\SlashHitEffectSystem.h">
-      <Filter>Scene\GameScene</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\Scene\GameScene\PlayerVisualProfile.h">
       <Filter>Scene\GameScene</Filter>
     </ClInclude>
     <ClInclude Include="Source\Utility\dx.h">
@@ -215,6 +209,12 @@
     <ClInclude Include="Source\Utility\Sound\AudioTypes.h">
       <Filter>Utility\Sound</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Scene\GameScene\EnemyVisualProfile.h">
+      <Filter>Scene\GameScene\Enemy</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Scene\GameScene\PlayerVisualProfile.h">
+      <Filter>Scene\GameScene\Player</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\Utility\Math.cpp">
@@ -244,16 +244,10 @@
     <ClCompile Include="Source\Scene\GameScene\GameSceneStage.cpp">
       <Filter>Scene\GameScene</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Scene\GameScene\EnemyVisualProfile.cpp">
-      <Filter>Scene\GameScene</Filter>
-    </ClCompile>
     <ClCompile Include="Source\Scene\GameScene\StageFloorStyle.cpp">
       <Filter>Scene\GameScene</Filter>
     </ClCompile>
     <ClCompile Include="Source\Scene\GameScene\SlashHitEffectSystem.cpp">
-      <Filter>Scene\GameScene</Filter>
-    </ClCompile>
-    <ClCompile Include="Source\Scene\GameScene\PlayerVisualProfile.cpp">
       <Filter>Scene\GameScene</Filter>
     </ClCompile>
     <ClCompile Include="Source\Utility\DirectX11.cpp">
@@ -336,6 +330,14 @@
     </ClCompile>
     <ClCompile Include="Source\Utility\Sound\AudioSystem.cpp">
       <Filter>Utility\Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Scene\GameScene\GameSceneUpdate.cpp" />
+    <ClCompile Include="Source\Scene\GameScene\GameSceneWorldRender.cpp" />
+    <ClCompile Include="Source\Scene\GameScene\EnemyVisualProfile.cpp">
+      <Filter>Scene\GameScene\Enemy</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Scene\GameScene\PlayerVisualProfile.cpp">
+      <Filter>Scene\GameScene\Player</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
