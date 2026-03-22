@@ -1085,3 +1085,4 @@ namespace DirectX
 
 #endif // __DIRECTXTK_EFFECTS_H__
 
+

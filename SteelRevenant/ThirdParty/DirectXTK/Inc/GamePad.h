@@ -362,3 +362,4 @@ namespace DirectX
 #pragma warning(pop)
 #endif
 
+

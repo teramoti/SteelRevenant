@@ -62,3 +62,4 @@ namespace DirectX
             _In_ bool forceSRGB = false);
 }
 
+

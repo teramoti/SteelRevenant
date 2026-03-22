@@ -1,495 +1,494 @@
-﻿//------------------------//------------------------
-// Contents(処理内容) ステージ選択画面の更新と描画処理を実装する。
-//------------------------//------------------------
-// user(作成者) Keishi Teramoto
-// Created date(作成日) 2026 / 03 / 16
-// last updated (最終更新日) 2026 / 03 / 17
-//------------------------//------------------------
+﻿#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
 #include "StageSelectScene.h"
 
-#include "../../GameSystem/InputManager.h"
+#include "../../Action/BattleRuleBook.h"
 #include "../../GameSystem/DrawManager.h"
 #include "../../GameSystem/GameSaveData.h"
+#include "../../GameSystem/InputManager.h"
 #include "../../GameSystem/UiUtil.h"
-#include "../../Action/BattleRuleBook.h"
 #include "../Base/SceneUiSound.h"
 #include "../SceneManager/SceneManager.h"
+#include "../../Utility/Sound/AudioSystem.h"
+#include "../../Utility/DirectX11.h"
+#include "../GameScene/GameSceneWorldBackdrop.h"
+#include "../GameScene/GameSceneWorldArena.h"
+#include <GeometricPrimitive.h>
+
+#include <Mouse.h>
 
 #include <algorithm>
 #include <array>
-#include <cstdint>
+#include <cmath>
 #include <string>
-#include <Mouse.h>
 
 using DirectX::SimpleMath::Color;
 using DirectX::SimpleMath::Vector2;
+using DirectX::SimpleMath::Vector3;
+using DirectX::SimpleMath::Matrix;
 
 namespace
 {
-	constexpr float kClickFxDurationSec = 0.22f;
+    constexpr float kClickFxDurationSec = 0.22f;
+    constexpr int kStageCount = 3;
 
-	// 指定幅に収まる文字列へ省略記号付きで整形する。
-	std::wstring FitTextWidth(System::UIShaderText* ui, const std::wstring& text, float scale, float maxWidth)
-	{
-		if (ui == nullptr || text.empty() || maxWidth <= 0.0f)
-		{
-			return text;
-		}
-		const std::wstring ellipsis = L"…";
-		if (ui->Measure(text, scale).x <= maxWidth)
-		{
-			return text;
-		}
-		std::wstring result = text;
-		while (!result.empty())
-		{
-			std::wstring candidate = result + ellipsis;
-			if (ui->Measure(candidate, scale).x <= maxWidth)
-			{
-				return candidate;
-			}
-			result.pop_back();
-		}
-		return ellipsis;
-	}
+
+    struct StageSelectFront3DResources
+    {
+        GameSceneWorldBackdrop backdrop;
+        std::array<std::unique_ptr<GameSceneWorldArena>, 3> arenas;
+        std::unique_ptr<DirectX::GeometricPrimitive> sphere;
+        std::unique_ptr<DirectX::GeometricPrimitive> cylinder;
+        std::unique_ptr<DirectX::GeometricPrimitive> torus;
+        bool initialized = false;
+
+        void Ensure(ID3D11Device* device, ID3D11DeviceContext* context)
+        {
+            if (initialized || device == nullptr || context == nullptr)
+            {
+                return;
+            }
+            backdrop.Initialize(device, context);
+            for (int i = 0; i < 3; ++i)
+            {
+                arenas[i] = std::make_unique<GameSceneWorldArena>();
+                arenas[i]->Initialize(device, context, i + 1);
+            }
+            sphere = DirectX::GeometricPrimitive::CreateSphere(context, 0.42f, 12);
+            cylinder = DirectX::GeometricPrimitive::CreateCylinder(context, 1.0f, 0.10f, 12);
+            torus = DirectX::GeometricPrimitive::CreateTorus(context, 1.2f, 0.08f, 24);
+            initialized = true;
+            (void)device;
+        }
+    };
+
+    StageSelectFront3DResources& GetStageSelectFront3D()
+    {
+        static StageSelectFront3DResources resources;
+        return resources;
+    }
+
+    void RenderStageSelectFront3D(int stageIndex, float blinkTimer, float width, float height)
+    {
+        auto* device = DirectX11::Get().GetDevice().Get();
+        auto* context = DirectX11::Get().GetContext().Get();
+        if (device == nullptr || context == nullptr)
+        {
+            return;
+        }
+
+        auto& resources = GetStageSelectFront3D();
+        resources.Ensure(device, context);
+        const int stage = std::clamp(stageIndex, 1, 3);
+        const float aspect = (height > 1.0f) ? (width / height) : (16.0f / 9.0f);
+        const Matrix projection = Matrix::CreatePerspectiveFieldOfView(DirectX::XMConvertToRadians(50.0f), aspect, 0.1f, 900.0f);
+        const float camYaw = 0.45f + blinkTimer * 0.18f + stage * 0.22f;
+        const float camDist = 18.5f;
+        const Vector3 eye(std::sin(camYaw) * camDist, 8.0f + std::sin(blinkTimer * 0.35f) * 0.5f, std::cos(camYaw) * camDist);
+        const Vector3 target(0.0f, 1.0f, 0.0f);
+        const Matrix view = Matrix::CreateLookAt(eye, target, Vector3::Up);
+
+        resources.backdrop.Render(context, view, projection, eye);
+        if (resources.arenas[stage - 1])
+        {
+            resources.arenas[stage - 1]->Render(context, view, projection);
+        }
+
+        if (resources.cylinder && resources.sphere && resources.torus)
+        {
+            const Color stageAccent = (stage == 1) ? Color(0.54f, 0.88f, 1.0f, 1.0f)
+                : ((stage == 2) ? Color(1.0f, 0.74f, 0.30f, 1.0f) : Color(0.42f, 0.96f, 0.88f, 1.0f));
+            const float pulse = 0.5f + 0.5f * std::sin(blinkTimer * 3.4f);
+            resources.cylinder->Draw(Matrix::CreateScale(0.16f, 1.9f, 0.16f) * Matrix::CreateTranslation(0.0f, 1.9f, 0.0f), view, projection, Color(stageAccent.x * 0.55f, stageAccent.y * 0.55f, stageAccent.z * 0.55f, 1.0f));
+            resources.sphere->Draw(Matrix::CreateScale(0.95f + pulse * 0.22f) * Matrix::CreateTranslation(0.0f, 4.2f, 0.0f), view, projection, stageAccent);
+            resources.torus->Draw(Matrix::CreateScale(1.4f + pulse * 0.22f, 1.0f, 1.4f + pulse * 0.22f) * Matrix::CreateRotationX(DirectX::XM_PIDIV2) * Matrix::CreateTranslation(0.0f, 0.22f, 0.0f), view, projection, Color(stageAccent.x, stageAccent.y, stageAccent.z, 0.82f));
+
+            const auto& spawnPoints = resources.arenas[stage - 1]->GetSpawnPoints();
+            const size_t previewCount = std::min<size_t>(4, spawnPoints.size());
+            for (size_t i = 0; i < previewCount; ++i)
+            {
+                const Vector3 pos = spawnPoints[i];
+                resources.sphere->Draw(Matrix::CreateScale(0.52f) * Matrix::CreateTranslation(pos.x, pos.y + 0.7f, pos.z), view, projection, Color(1.0f, 0.22f, 0.24f, 1.0f));
+                resources.torus->Draw(Matrix::CreateScale(0.85f + 0.1f * i, 1.0f, 0.85f + 0.1f * i) * Matrix::CreateRotationX(DirectX::XM_PIDIV2) * Matrix::CreateTranslation(pos.x, 0.12f, pos.z), view, projection, Color(stageAccent.x, stageAccent.y, stageAccent.z, 0.46f));
+            }
+        }
+    }
+
+    std::wstring FitTextWidth(
+        System::UIShaderText* ui,
+        const std::wstring& text,
+        float scale,
+        float maxWidth)
+    {
+        if (ui == nullptr || text.empty() || maxWidth <= 0.0f)
+        {
+            return text;
+        }
+
+        const std::wstring ellipsis = L"...";
+        if (ui->Measure(text, scale).x <= maxWidth)
+        {
+            return text;
+        }
+
+        std::wstring trimmed = text;
+        while (!trimmed.empty())
+        {
+            const std::wstring candidate = trimmed + ellipsis;
+            if (ui->Measure(candidate, scale).x <= maxWidth)
+            {
+                return candidate;
+            }
+            trimmed.pop_back();
+        }
+
+        return ellipsis;
+    }
 }
 
-// ステージ選択シーンを生成する。
 StageSelectScene::StageSelectScene(SceneManager* sceneManager)
-	: ActionSceneBase(sceneManager, false)
-	, m_selectedStage(0)
-	, m_blinkTimer(0.0f)
-	, m_clickFxTimer(0.0f)
-	, m_clickFxPos(Vector2::Zero)
+    : ActionSceneBase(sceneManager, false)
+    , m_selectedStage(0)
+    , m_blinkTimer(0.0f)
+    , m_clickFxTimer(0.0f)
+    , m_clickFxPos(Vector2::Zero)
 {
-	m_SceneFlag = false;
+    m_SceneFlag = false;
 }
 
-// 確保済み資産を解放する。
 StageSelectScene::~StageSelectScene()
 {
-	Finalize();
+    Finalize();
 }
 
-// 選択状態とUI描画資産を初期化する。
 void StageSelectScene::Initialize()
 {
-	m_selectedStage = 0;
-	m_blinkTimer = 0.0f;
-	m_clickFxTimer = 0.0f;
-	m_clickFxPos = Vector2::Zero;
-	m_uiSolidTexture = UiUtil::CreateSolidTexture(m_directX.GetDevice().Get());
-	EnsureTextRenderer();
-	// UI操作はクリック前提のため、絶対座標モードへ切り替える。
-	DirectX::Mouse::Get().SetMode(DirectX::Mouse::MODE_ABSOLUTE);
-	SetSystemCursorVisible(true);
+    m_selectedStage = std::clamp(GameSaveData::GetInstance().GetStageNum() - 1, 0, kStageCount - 1);
+    m_blinkTimer = 0.0f;
+    m_clickFxTimer = 0.0f;
+    m_clickFxPos = Vector2::Zero;
+    m_uiSolidTexture = UiUtil::CreateSolidTexture(m_directX.GetDevice().Get());
+    EnsureTextRenderer();
+
+    // keyboard-only stage select: hide system cursor
+    DirectX::Mouse::Get().SetMode(DirectX::Mouse::MODE_RELATIVE);
+    System::InputManager::GetInstance().ResetMouseDelta();
+    SetSystemCursorVisible(false);
+
+    // Play stage select BGM
+    GameAudio::AudioSystem::GetInstance().PlayBgm(GameAudio::BgmId::StageSelect);
 }
 
-// 入力に応じて選択カーソルと遷移先を更新する。
 void StageSelectScene::Update(const DX::StepTimer& stepTimer)
 {
-	const float dt = static_cast<float>(stepTimer.GetElapsedSeconds());
-	m_blinkTimer += dt;
-	m_clickFxTimer = std::max(0.0f, m_clickFxTimer - dt);
+    const float dt = static_cast<float>(stepTimer.GetElapsedSeconds());
+    m_blinkTimer += dt;
+    m_clickFxTimer = std::max(0.0f, m_clickFxTimer - dt);
 
-	if (m_textRenderer != nullptr)
-	{
-		m_textRenderer->Update(dt);
-	}
+    if (m_textRenderer != nullptr)
+    {
+        m_textRenderer->Update(dt);
+    }
 
-	const DirectX::Keyboard::KeyboardStateTracker tracker = System::InputManager::GetInstance().GetKeyboardTracker();
-	const DirectX::Mouse::ButtonStateTracker mouseTracker = System::InputManager::GetInstance().GetMouseTracker();
-	const DirectX::Mouse::State mouseState = System::InputManager::GetInstance().GetMouseState();
-	const int previousSelectedStage = m_selectedStage;
+    const System::InputManager& input = System::InputManager::GetInstance();
+    const DirectX::Keyboard::KeyboardStateTracker* keyboard = input.GetKeyboardTracker();
 
-	// 上下入力だけでカーソルを巡回移動する。
-	if (tracker.pressed.Up || tracker.pressed.W || tracker.pressed.A)
-	{
-		m_selectedStage = (m_selectedStage + 2) % 3;
-	}
-	if (tracker.pressed.Down || tracker.pressed.S || tracker.pressed.D)
-	{
-		m_selectedStage = (m_selectedStage + 1) % 3;
-	}
+    const int previousSelection = m_selectedStage;
 
-	// マウスホバーでカード選択、クリックで即出撃。
-	const float width = static_cast<float>(std::max(1, m_directX.GetWidth()));
-	const float height = static_cast<float>(std::max(1, m_directX.GetHeight()));
-	const float uiScale = std::max(0.78f, std::min(1.35f, std::min(width / 1280.0f, height / 720.0f)));
-	const float frameX = width * 0.08f;
-	const float safeMargin = 12.0f * uiScale;
-	const float frameH = std::min(std::min(height * 0.88f, 620.0f * uiScale), height - safeMargin * 2.0f);
-	const float frameY = std::max(safeMargin, std::min(38.0f * uiScale, height - frameH - safeMargin));
-	const float frameW = width * 0.84f;
-	const float leftX = frameX + 14.0f * uiScale;
-	const float leftW = frameW * 0.42f;
-	const float rightX = leftX + leftW + 18.0f * uiScale;
-	const float rightY = frameY + 56.0f * uiScale;
-	const float rightW = frameX + frameW - rightX - 14.0f * uiScale;
-	const float cardX = rightX + 12.0f * uiScale;
-	const float cardW = rightW - 24.0f * uiScale;
-	const float cardH = 82.0f * uiScale;
-	const float cardGap = 10.0f * uiScale;
-	const float listStartY = rightY + 12.0f * uiScale;
-	const Vector2 mousePoint(static_cast<float>(mouseState.x), static_cast<float>(mouseState.y));
-	const bool leftClicked = (mouseTracker.leftButton == DirectX::Mouse::ButtonStateTracker::PRESSED);
-	for (int i = 0; i < 3; ++i)
-	{
-		const float y = listStartY + static_cast<float>(i) * (cardH + cardGap);
-		const bool hover =
-			(mousePoint.x >= cardX && mousePoint.x <= (cardX + cardW) &&
-			 mousePoint.y >= y && mousePoint.y <= (y + cardH));
-		if (!hover)
-		{
-			continue;
-		}
+    const auto launchSelectedStage = [this]()
+    {
+        GameSaveData::GetInstance().SetStageNum(m_selectedStage + 1);
+        if (m_sceneManager != nullptr)
+        {
+            m_sceneManager->RequestTransition(GAME_SCENE);
+        }
+    };
 
-		m_selectedStage = i;
-		if (leftClicked)
-		{
-			m_clickFxTimer = kClickFxDurationSec;
-			m_clickFxPos = mousePoint;
-			SceneUiSound::PlayConfirm();
-			GameSaveData::GetInstance().SetStageNum(m_selectedStage + 1);
-			m_sceneManager->SetScene(GAME_SCENE);
-			return;
-		}
-		break;
-	}
+    const auto returnToTitle = [this]()
+    {
+        if (m_sceneManager != nullptr)
+        {
+            m_sceneManager->RequestTransition(TITLE_SCENE);
+        }
+    };
 
-	if (tracker.pressed.Enter || tracker.pressed.Space)
-	{
-		SceneUiSound::PlayConfirm();
-		GameSaveData::GetInstance().SetStageNum(m_selectedStage + 1);
-		m_sceneManager->SetScene(GAME_SCENE);
-		return;
-	}
+    if (keyboard != nullptr)
+    {
+        if (keyboard->pressed.Up || keyboard->pressed.W || keyboard->pressed.A || keyboard->pressed.Left)
+        {
+            m_selectedStage = (m_selectedStage + kStageCount - 1) % kStageCount;
+        }
+        if (keyboard->pressed.Down || keyboard->pressed.S || keyboard->pressed.D || keyboard->pressed.Right)
+        {
+            m_selectedStage = (m_selectedStage + 1) % kStageCount;
+        }
+        if (keyboard->pressed.Enter || keyboard->pressed.Space)
+        {
+            SceneUiSound::PlayConfirm();
+            launchSelectedStage();
+            return;
+        }
+        if (keyboard->pressed.Tab || keyboard->pressed.F1)
+        {
+            SceneUiSound::PlayBack();
+            if (m_sceneManager != nullptr)
+                m_sceneManager->RequestTransition(SETTINGS_SCENE);
+            return;
+        }
+        if (keyboard->pressed.Escape)
+        {
+            SceneUiSound::PlayBack();
+            returnToTitle();
+            return;
+        }
+    }
 
-	if (tracker.pressed.Escape)
-	{
-		SceneUiSound::PlayBack();
-		m_sceneManager->SetScene(TITLE_SCENE);
-		return;
-	}
+    // mouse input is intentionally ignored (keyboard-only UI). Click FX and mouse hit-testing removed.
 
-	if (m_selectedStage != previousSelectedStage)
-	{
-		SceneUiSound::PlayMove();
-	}
+    if (m_selectedStage != previousSelection)
+    {
+        SceneUiSound::PlayMove();
+    }
 }
 
-// ステージカードUIを描画する。
 void StageSelectScene::Render()
 {
-	System::UIShaderText* ui = EnsureTextRenderer();
-	// UI操作はクリック前提のため、絶対座標モードへ切り替える。
-	DirectX::Mouse::Get().SetMode(DirectX::Mouse::MODE_ABSOLUTE);
-	if (ui == nullptr)
-	{
-		return;
-	}
+    System::UIShaderText* ui = EnsureTextRenderer();
+    DirectX::SpriteBatch* batch = System::DrawManager::GetInstance().GetSprite();
+    if (ui == nullptr || batch == nullptr)
+    {
+        return;
+    }
 
-	System::UIShaderStyle titleStyle;
-	titleStyle.baseColor = Color(0.9f, 0.95f, 1.0f, 1.0f);
-	titleStyle.outlineColor = Color(0.05f, 0.05f, 0.08f, 1.0f);
-	titleStyle.pulseAmount = 0.0f;
-	titleStyle.pulseSpeed = 0.0f;
+    const float width = static_cast<float>(std::max(1, m_directX.GetWidth()));
+    const float height = static_cast<float>(std::max(1, m_directX.GetHeight()));
+    const float uiScale = std::max(0.80f, std::min(1.35f, std::min(width / 1280.0f, height / 720.0f)));
 
-	System::UIShaderStyle selectedStyle;
-	selectedStyle.baseColor = Color(0.72f, 0.92f, 1.0f, 1.0f);
-	selectedStyle.outlineColor = Color(0.02f, 0.08f, 0.14f, 1.0f);
-	selectedStyle.pulseAmount = 0.0f;
+    const float frameX = width * 0.08f;
+    const float frameY = height * 0.10f;
+    const float frameW = width * 0.84f;
+    const float frameH = height * 0.78f;
+    const float detailW = frameW * 0.42f;
+    const float detailX = frameX + 18.0f * uiScale;
+    const float detailY = frameY + 56.0f * uiScale;
+    const float detailH = frameH - 84.0f * uiScale;
+    const float listX = frameX + detailW + 26.0f * uiScale;
+    const float listY = frameY + 74.0f * uiScale;
+    const float cardW = frameW - detailW - 44.0f * uiScale;
+    const float cardH = 92.0f * uiScale;
+    const float cardGap = 14.0f * uiScale;
 
-	System::UIShaderStyle normalStyle;
-	normalStyle.baseColor = Color(0.85f, 0.85f, 0.85f, 1.0f);
-	normalStyle.outlineColor = Color(0.06f, 0.06f, 0.06f, 1.0f);
+    const std::array<const Action::StageRuleDefinition*, kStageCount> stageRules =
+    {
+        &Action::BattleRuleBook::GetInstance().GetStageRule(1),
+        &Action::BattleRuleBook::GetInstance().GetStageRule(2),
+        &Action::BattleRuleBook::GetInstance().GetStageRule(3)
+    };
 
-	System::UIShaderStyle subStyle;
-	subStyle.baseColor = Color(0.68f, 0.76f, 0.86f, 1.0f);
-	subStyle.outlineColor = Color(0.04f, 0.05f, 0.07f, 1.0f);
+    const Action::StageRuleDefinition& selectedRule =
+        *stageRules[static_cast<std::size_t>(std::clamp(m_selectedStage, 0, kStageCount - 1))];
 
-	System::UIShaderStyle helpStyle;
-	helpStyle.baseColor = Color(1.0f, 0.9f, 0.25f, 1.0f);
-	helpStyle.outlineColor = Color(0.15f, 0.1f, 0.0f, 1.0f);
-	helpStyle.blink = false;
-	helpStyle.blinkPeriod = 0.0f;
+    System::UIShaderStyle titleStyle;
+    titleStyle.baseColor = Color(0.94f, 0.97f, 1.0f, 1.0f);
+    titleStyle.outlineColor = Color(0.06f, 0.08f, 0.12f, 1.0f);
+    titleStyle.pulseAmount = 0.0f;
 
-	BeginSpriteLayer();
-	DirectX::SpriteBatch* batch = System::DrawManager::GetInstance().GetSprite();
-	if (batch == nullptr)
-	{
-		EndSpriteLayer();
-		return;
-	}
+    System::UIShaderStyle bodyStyle;
+    bodyStyle.baseColor = Color(0.82f, 0.86f, 0.92f, 1.0f);
+    bodyStyle.outlineColor = Color(0.04f, 0.05f, 0.08f, 1.0f);
+    bodyStyle.pulseAmount = 0.0f;
 
-	const float width = static_cast<float>(std::max(1, m_directX.GetWidth()));
-	const float height = static_cast<float>(std::max(1, m_directX.GetHeight()));
-	const float uiScale = std::max(0.78f, std::min(1.35f, std::min(width / 1280.0f, height / 720.0f)));
-	const float frameX = width * 0.08f;
-	const float safeMargin = 12.0f * uiScale;
-	const float frameH = std::min(std::min(height * 0.84f, 540.0f * uiScale), height - safeMargin * 2.0f);
-	const float frameY = std::max(safeMargin, std::min(38.0f * uiScale, height - frameH - safeMargin));
-	const float frameW = width * 0.84f;
+    System::UIShaderStyle accentStyle = bodyStyle;
+    accentStyle.baseColor = Color(0.70f, 0.92f, 1.0f, 1.0f);
 
-	// 単色背景を避けるため、縦グラデーション + 斜光 + 雲帯を重ねる。
-	for (int band = 0; band < 16; ++band)
-	{
-		const float t = static_cast<float>(band) / 15.0f;
-		const float y = height * t;
-		const float h = (height / 16.0f) + 2.0f;
-		DrawSolidRect(
-			batch,
-			Vector2(0.0f, y),
-			Vector2(width, h),
-			Color(0.012f + t * 0.046f, 0.026f + t * 0.074f, 0.058f + t * 0.108f, 0.9f));
-	}
+    const float blink = 0.55f + 0.45f * std::sin(m_blinkTimer * 3.2f);
+    System::UIShaderStyle helpStyle = bodyStyle;
+    helpStyle.baseColor = Color(1.0f, 0.88f, 0.36f, blink);
 
-	for (int beam = 0; beam < 4; ++beam)
-	{
-		const float x = width * (0.14f + static_cast<float>(beam) * 0.22f);
+    RenderStageSelectFront3D(m_selectedStage + 1, m_blinkTimer, width, height);
 
-		batch->Draw(
-			m_uiSolidTexture.Get(),
-			Vector2(x, -height * 0.2f),
-			nullptr,
-			(beam % 2 == 0) ? Color(0.14f, 0.34f, 0.7f, 0.14f) : Color(0.22f, 0.5f, 0.88f, 0.18f),
-			0.33f,
-			Vector2::Zero,
-			DirectX::XMFLOAT2(220.0f, height * 1.35f));
-	}
+    BeginSpriteLayer();
 
-	for (int cloud = 0; cloud < 10; ++cloud)
-	{
-		const float fc = static_cast<float>(cloud);
-		const float loop = width * (0.06f + std::fmod(fc * 0.11f, 0.82f));
-		const float y = height * 0.12f + std::fmod(fc * 41.0f, height * 0.62f);
-		const float len = 70.0f + std::fmod(fc * 17.0f, 86.0f);
-		DrawSolidRect(batch, Vector2(loop, y), Vector2(len, 8.0f), Color(0.22f, 0.24f, 0.3f, 0.24f));
-	}
+    for (int band = 0; band < 14; ++band)
+    {
+        const float t = static_cast<float>(band) / 13.0f;
+        const float y = t * height;
+        DrawSolidRect(
+            batch,
+            Vector2(0.0f, y),
+            Vector2(width, height / 13.0f + 2.0f),
+            Color(0.02f + t * 0.04f, 0.04f + t * 0.05f, 0.08f + t * 0.08f, 0.18f));
+    }
 
-	const float leftX = frameX + 14.0f * uiScale;
-	const float leftY = frameY + 52.0f * uiScale;
-	const float leftW = frameW * 0.42f;
-	const float leftH = frameH - 68.0f;
+    DrawSolidRect(batch, Vector2(frameX, frameY), Vector2(frameW, frameH), Color(0.03f, 0.05f, 0.08f, 0.60f));
+    DrawSolidRect(batch, Vector2(frameX, frameY), Vector2(frameW, 2.0f), Color(0.62f, 0.80f, 1.0f, 0.92f));
 
-	const float rightX = leftX + leftW + 18.0f * uiScale;
-	const float rightY = leftY;
-	const float rightW = frameX + frameW - rightX - 14.0f * uiScale;
-	const float rightH = leftH;
+    // Japanese localized headings and reorganized left panel priority
+    ui->Draw(batch, L"ステージ選択", Vector2(frameX + 24.0f * uiScale, frameY + 18.0f * uiScale), titleStyle, 1.28f * uiScale);
+    ui->Draw(batch, L"ミッションを選択して出撃してください。", Vector2(frameX + 260.0f * uiScale, frameY + 24.0f * uiScale), bodyStyle, 0.72f * uiScale);
 
-	DrawSolidRect(batch, Vector2(frameX, frameY), Vector2(frameW, frameH), Color(0.02f, 0.04f, 0.07f, 0.84f));
-	DrawSolidRect(batch, Vector2(frameX, frameY), Vector2(frameW, 2.0f), Color(0.72f, 0.82f, 1.0f, 0.86f));
+    DrawSolidRect(batch, Vector2(detailX, detailY), Vector2(detailW - 18.0f * uiScale, detailH), Color(0.05f, 0.08f, 0.12f, 0.70f));
+    DrawSolidRect(batch, Vector2(detailX, detailY), Vector2(detailW - 18.0f * uiScale, 1.5f), Color(0.48f, 0.64f, 0.84f, 0.84f));
 
-	// 文字コード依存を避けるため、画面文言は Unicode エスケープで固定する。
-	ui->Draw(batch, L"\u30b9\u30c6\u30fc\u30b8\u9078\u629e", Vector2(frameX + 28.0f * uiScale, frameY + 20.0f * uiScale), titleStyle, 1.18f * uiScale);
-	ui->Draw(batch, L"\u51fa\u6483\u5148\u3092\u9078\u3093\u3067 Enter \u3067\u958b\u59cb", Vector2(frameX + 260.0f * uiScale, frameY + 24.0f * uiScale), normalStyle, 0.76f * uiScale);
+    ui->Draw(batch, L"ミッション概要", Vector2(detailX + 14.0f * uiScale, detailY + 14.0f * uiScale), titleStyle, 0.90f * uiScale);
 
-	std::array<const Action::StageRuleDefinition*, 3> stageRules =
-	{
-		&Action::BattleRuleBook::GetInstance().GetStageRule(1),
-		&Action::BattleRuleBook::GetInstance().GetStageRule(2),
-		&Action::BattleRuleBook::GetInstance().GetStageRule(3)
-	};
+    // priority: Stage name, summary, terrain, enemy特徴, clear conditions, numeric info
+    const std::wstring stageLabel = selectedRule.missionName != nullptr ? std::wstring(selectedRule.missionName) : (std::wstring(L"ステージ") + std::to_wstring(m_selectedStage + 1));
+    const std::wstring missionSummary = selectedRule.missionSummary != nullptr ? selectedRule.missionSummary : L"";
+    const std::wstring terrainLabel = selectedRule.terrainLabel != nullptr ? selectedRule.terrainLabel : L"";
+    const std::wstring enemyTrend = selectedRule.enemyTrend != nullptr ? selectedRule.enemyTrend : L"";
+    const std::wstring tacticalMemo = selectedRule.tacticalMemo != nullptr ? selectedRule.tacticalMemo : L"";
 
-	// 左パネル: 選択中ステージの詳細と攻略要点を表示する。
+    ui->Draw(batch, stageLabel, Vector2(detailX + 14.0f * uiScale, detailY + 52.0f * uiScale), accentStyle, 1.20f * uiScale);
+    ui->Draw(batch, missionSummary, Vector2(detailX + 14.0f * uiScale, detailY + 92.0f * uiScale), bodyStyle, 0.62f * uiScale);
 
-	DrawSolidRect(batch, Vector2(leftX, leftY), Vector2(leftW, leftH), Color(0.04f, 0.07f, 0.10f, 0.86f));
-	DrawSolidRect(batch, Vector2(leftX, leftY), Vector2(leftW, std::max(1.0f, 1.5f * uiScale)), Color(0.64f, 0.8f, 1.0f, 0.8f));
-	ui->Draw(batch, L"\u4efb\u52d9\u8a73\u7d30", Vector2(leftX + 14.0f * uiScale, leftY + 12.0f * uiScale), titleStyle, 0.9f * uiScale);
+    ui->Draw(batch, L"エリア構成", Vector2(detailX + 14.0f * uiScale, detailY + 140.0f * uiScale), accentStyle, 0.58f * uiScale);
+    ui->Draw(batch, terrainLabel, Vector2(detailX + 14.0f * uiScale, detailY + 158.0f * uiScale), bodyStyle, 0.56f * uiScale);
 
-	const int infoIndex = std::max(0, std::min(2, m_selectedStage));
-	const Action::StageRuleDefinition& selectedRule = *stageRules[static_cast<size_t>(infoIndex)];
-	const std::array<Color, 3> stageAccentColors =
-	{
-		Color(0.68f, 0.84f, 1.0f, 0.94f),
-		Color(1.0f, 0.72f, 0.28f, 0.94f),
-		Color(0.38f, 0.94f, 1.0f, 0.94f)
-	};
-	const Color selectedAccent = stageAccentColors[static_cast<size_t>(infoIndex)];
+    ui->Draw(batch, L"敵の特徴", Vector2(detailX + 14.0f * uiScale, detailY + 196.0f * uiScale), accentStyle, 0.58f * uiScale);
+    ui->Draw(batch, enemyTrend, Vector2(detailX + 14.0f * uiScale, detailY + 214.0f * uiScale), bodyStyle, 0.58f * uiScale);
 
-	DrawSolidRect(batch, Vector2(leftX + 14.0f * uiScale, leftY + 44.0f * uiScale), Vector2(leftW - 28.0f * uiScale, 62.0f * uiScale), Color(0.05f, 0.11f, 0.14f, 0.82f));
-	DrawSolidRect(batch, Vector2(leftX + 14.0f * uiScale, leftY + 44.0f * uiScale), Vector2(6.0f * uiScale, 62.0f * uiScale), selectedAccent);
-	ui->Draw(batch, std::wstring(L"0") + std::to_wstring(infoIndex + 1), Vector2(leftX + 28.0f * uiScale, leftY + 48.0f * uiScale), selectedStyle, 1.42f * uiScale);
-	ui->Draw(batch, std::wstring(L"エリア名: ") + selectedRule.missionName, Vector2(leftX + 86.0f * uiScale, leftY + 56.0f * uiScale), selectedStyle, 0.74f * uiScale);
-	ui->Draw(batch, std::wstring(L"地形: ") + selectedRule.terrainLabel, Vector2(leftX + 86.0f * uiScale, leftY + 80.0f * uiScale), normalStyle, 0.60f * uiScale);
+    ui->Draw(batch, L"攻略メモ", Vector2(detailX + 14.0f * uiScale, detailY + 252.0f * uiScale), accentStyle, 0.58f * uiScale);
+    ui->Draw(batch, tacticalMemo, Vector2(detailX + 14.0f * uiScale, detailY + 270.0f * uiScale), bodyStyle, 0.56f * uiScale);
 
-	ui->Draw(batch, std::wstring(L"敵傾向: ") + selectedRule.enemyTrend, Vector2(leftX + 14.0f * uiScale, leftY + 120.0f * uiScale), normalStyle, 0.58f * uiScale);
-	ui->Draw(batch, std::wstring(L"戦術メモ: ") + selectedRule.tacticalMemo, Vector2(leftX + 14.0f * uiScale, leftY + 144.0f * uiScale), normalStyle, 0.56f * uiScale);
+    // numeric info (secondary)
+    const std::wstring timeText = UiUtil::ToWStringFixed(selectedRule.stageStartTimeSec, 0) + L" 秒";
+    const std::wstring relayText = std::to_wstring(selectedRule.requiredRelayCount) + L" 回";
+    const std::wstring aliveText = std::to_wstring(selectedRule.maxAliveCount);
+    const std::wstring waveText = std::to_wstring(selectedRule.totalWaveCount);
 
-	const float enemyLoad = std::max(0.0f, std::min(1.0f, static_cast<float>(selectedRule.maxAliveCount) / 7.0f));
-	const float timeLoad = std::max(0.0f, std::min(1.0f, 1.0f - (selectedRule.stageStartTimeSec / 360.0f)));
-	const float relayLoad = std::max(0.0f, std::min(1.0f, static_cast<float>(selectedRule.requiredRelayCount) / 3.0f));
-	ui->Draw(batch, L"任務強度", Vector2(leftX + 14.0f * uiScale, leftY + 176.0f * uiScale), titleStyle, 0.66f * uiScale);
-	ui->Draw(batch, L"敵圧", Vector2(leftX + 16.0f * uiScale, leftY + 212.0f * uiScale), subStyle, 0.54f * uiScale);
-	DrawSolidRect(batch, Vector2(leftX + 88.0f * uiScale, leftY + 220.0f * uiScale), Vector2(120.0f * uiScale, 6.0f * uiScale), Color(0.12f, 0.15f, 0.18f, 0.92f));
-	DrawSolidRect(batch, Vector2(leftX + 88.0f * uiScale, leftY + 220.0f * uiScale), Vector2(120.0f * uiScale * enemyLoad, 6.0f * uiScale), selectedAccent);
-	ui->Draw(batch, L"時間圧", Vector2(leftX + 16.0f * uiScale, leftY + 234.0f * uiScale), subStyle, 0.54f * uiScale);
-	DrawSolidRect(batch, Vector2(leftX + 88.0f * uiScale, leftY + 242.0f * uiScale), Vector2(120.0f * uiScale, 6.0f * uiScale), Color(0.12f, 0.15f, 0.18f, 0.92f));
-	DrawSolidRect(batch, Vector2(leftX + 88.0f * uiScale, leftY + 242.0f * uiScale), Vector2(120.0f * uiScale * timeLoad, 6.0f * uiScale), Color(selectedAccent.x * 0.92f, selectedAccent.y * 0.86f, selectedAccent.z, 0.94f));
-	ui->Draw(batch, L"副目標圧", Vector2(leftX + 16.0f * uiScale, leftY + 256.0f * uiScale), subStyle, 0.54f * uiScale);
-	DrawSolidRect(batch, Vector2(leftX + 88.0f * uiScale, leftY + 264.0f * uiScale), Vector2(120.0f * uiScale, 6.0f * uiScale), Color(0.12f, 0.15f, 0.18f, 0.92f));
-	DrawSolidRect(batch, Vector2(leftX + 88.0f * uiScale, leftY + 264.0f * uiScale), Vector2(120.0f * uiScale * relayLoad, 6.0f * uiScale), Color(selectedAccent.x * 0.72f, selectedAccent.y * 0.92f, selectedAccent.z * 0.86f, 0.94f));
+    ui->Draw(batch, L"制限時間", Vector2(detailX + 14.0f * uiScale, detailY + 322.0f * uiScale), accentStyle, 0.58f * uiScale);
+    ui->Draw(batch, timeText, Vector2(detailX + 130.0f * uiScale, detailY + 322.0f * uiScale), bodyStyle, 0.58f * uiScale);
+    ui->Draw(batch, L"リレー目標", Vector2(detailX + 14.0f * uiScale, detailY + 348.0f * uiScale), accentStyle, 0.58f * uiScale);
+    ui->Draw(batch, relayText, Vector2(detailX + 130.0f * uiScale, detailY + 348.0f * uiScale), bodyStyle, 0.58f * uiScale);
+    ui->Draw(batch, L"同時上限", Vector2(detailX + 14.0f * uiScale, detailY + 374.0f * uiScale), accentStyle, 0.58f * uiScale);
+    ui->Draw(batch, aliveText, Vector2(detailX + 130.0f * uiScale, detailY + 374.0f * uiScale), bodyStyle, 0.58f * uiScale);
+    ui->Draw(batch, L"WAVE数", Vector2(detailX + 14.0f * uiScale, detailY + 400.0f * uiScale), accentStyle, 0.58f * uiScale);
+    ui->Draw(batch, waveText, Vector2(detailX + 130.0f * uiScale, detailY + 400.0f * uiScale), bodyStyle, 0.58f * uiScale);
 
-	DrawSolidRect(batch, Vector2(leftX + 14.0f * uiScale, leftY + 286.0f * uiScale), Vector2(leftW - 28.0f * uiScale, std::max(1.0f, 1.0f * uiScale)), Color(0.36f, 0.46f, 0.56f, 0.55f));
-	ui->Draw(batch, L"\u30df\u30c3\u30b7\u30e7\u30f3\u6761\u4ef6", Vector2(leftX + 14.0f * uiScale, leftY + 300.0f * uiScale), titleStyle, 0.72f * uiScale);
-	std::wstring missionLine = std::wstring(L"制限 ") + std::to_wstring(static_cast<int>(selectedRule.stageStartTimeSec)) + L"秒  /  スコアアタック";
-	missionLine += std::wstring(L"  /  Relay ") + std::to_wstring(selectedRule.requiredRelayCount);
-	ui->Draw(batch, missionLine, Vector2(leftX + 14.0f * uiScale, leftY + 326.0f * uiScale), helpStyle, 0.60f * uiScale);
-	ui->Draw(batch, selectedRule.missionSummary, Vector2(leftX + 14.0f * uiScale, leftY + 348.0f * uiScale), normalStyle, 0.52f * uiScale);
+    const std::array<Color, kStageCount> accents =
+    {
+        Color(0.62f, 0.84f, 1.0f, 0.96f),
+        Color(1.0f, 0.72f, 0.30f, 0.96f),
+        Color(0.38f, 0.96f, 0.88f, 0.96f)
+    };
 
-	DrawSolidRect(batch, Vector2(leftX + leftW - 92.0f * uiScale, leftY + 194.0f * uiScale), Vector2(58.0f * uiScale, 84.0f * uiScale), Color(0.06f, 0.1f, 0.14f, 0.76f));
-	DrawSolidRect(batch, Vector2(leftX + leftW - 92.0f * uiScale, leftY + 194.0f * uiScale), Vector2(58.0f * uiScale, 2.0f * uiScale), selectedAccent);
-	ui->Draw(batch, std::to_wstring(static_cast<int>(selectedRule.stageStartTimeSec / 60.0f)), Vector2(leftX + leftW - 74.0f * uiScale, leftY + 208.0f * uiScale), selectedStyle, 0.96f * uiScale);
-	ui->Draw(batch, L"TIME", Vector2(leftX + leftW - 78.0f * uiScale, leftY + 236.0f * uiScale), subStyle, 0.48f * uiScale);
-	ui->Draw(batch, std::to_wstring(selectedRule.requiredRelayCount), Vector2(leftX + leftW - 74.0f * uiScale, leftY + 252.0f * uiScale), helpStyle, 0.82f * uiScale);
-	ui->Draw(batch, L"RELAY", Vector2(leftX + leftW - 82.0f * uiScale, leftY + 274.0f * uiScale), subStyle, 0.42f * uiScale);
+    for (int i = 0; i < kStageCount; ++i)
+    {
+        const bool selected = (i == m_selectedStage);
+        const Color accent = accents[static_cast<std::size_t>(i)];
+        const Vector2 cardPos(listX, listY + static_cast<float>(i) * (cardH + cardGap));
+        const Vector2 cardSize(cardW, cardH);
+        const float selectPulse = 0.5f + 0.5f * std::sin(m_blinkTimer * 4.8f);
+        const float expand = selected ? (5.0f + selectPulse * 5.0f) * uiScale : 0.0f;
+        const Vector2 drawPos = selected ? (cardPos - Vector2(expand * 0.55f, expand * 0.28f)) : cardPos;
+        const Vector2 drawSize = selected ? (cardSize + Vector2(expand * 1.10f, expand * 0.56f)) : cardSize;
 
-	// 右パネル: ステージカード一覧。
-	DrawSolidRect(batch, Vector2(rightX, rightY), Vector2(rightW, rightH), Color(0.04f, 0.07f, 0.1f, 0.72f));
-	DrawSolidRect(batch, Vector2(rightX, rightY), Vector2(rightW, std::max(1.0f, 1.5f * uiScale)), Color(0.58f, 0.72f, 0.9f, 0.7f));
-	const float cardX = rightX + 12.0f * uiScale;
-	const float cardW = rightW - 24.0f * uiScale;
-	const float cardH = 82.0f * uiScale;
-	const float cardGap = 10.0f * uiScale;
-	const float listStartY = rightY + 12.0f * uiScale;
-	for (int i = 0; i < 3; ++i)
-	{
-		const bool selected = (i == m_selectedStage);
-		const Color accent = stageAccentColors[static_cast<size_t>(i)];
-		const float y = listStartY + static_cast<float>(i) * (cardH + cardGap);
-		const float pulseBoost = selected ? 0.12f : 0.0f;
-		const Color cardColor = selected
-			? Color(0.08f + accent.x * (0.14f + pulseBoost), 0.10f + accent.y * (0.12f + pulseBoost), 0.12f + accent.z * (0.10f + pulseBoost), 0.92f)
-			: Color(0.08f, 0.11f, 0.14f, 0.76f);
-		const Color edgeColor = selected ? accent : Color(accent.x * 0.52f, accent.y * 0.52f, accent.z * 0.52f, 0.62f);
+        // stronger selected visuals
+        DrawSolidRect(
+            batch,
+            drawPos,
+            drawSize,
+            selected ? Color(0.10f, 0.14f, 0.22f, 0.78f) : Color(0.06f, 0.08f, 0.12f, 0.56f));
+        DrawSolidRect(batch, drawPos, Vector2(6.0f * uiScale, drawSize.y), accent);
+        if (selected)
+        {
+            DrawSolidRect(
+                batch,
+                drawPos - Vector2(8.0f * uiScale, 8.0f * uiScale),
+                drawSize + Vector2(16.0f * uiScale, 16.0f * uiScale),
+                DirectX::SimpleMath::Color(accent.x, accent.y, accent.z, 0.12f + selectPulse * 0.10f));
+            DrawSolidRect(
+                batch,
+                drawPos + Vector2(drawSize.x - 6.0f * uiScale, 0.0f),
+                Vector2(6.0f * uiScale, drawSize.y),
+                Color(accent.x, accent.y, accent.z, 0.65f));
+            DrawSolidRect(
+                batch,
+                drawPos + Vector2(-3.0f * uiScale, -3.0f * uiScale),
+                drawSize + Vector2(6.0f * uiScale, 6.0f * uiScale),
+                DirectX::SimpleMath::Color(0.22f, 0.56f, 1.0f, 0.18f + selectPulse * 0.08f));
+        }
+        DrawSolidRect(batch, drawPos, Vector2(drawSize.x, 1.5f), selected ? accent : Color(accent.x, accent.y, accent.z, 0.40f));
 
-		DrawSolidRect(batch, Vector2(cardX, y), Vector2(cardW, cardH), cardColor);
-		DrawSolidRect(batch, Vector2(cardX, y), Vector2(5.0f * uiScale, cardH), Color(edgeColor.x, edgeColor.y, edgeColor.z, selected ? 0.88f : 0.46f));
-		DrawSolidRect(batch, Vector2(cardX, y), Vector2(cardW, std::max(1.0f, 1.5f * uiScale)), edgeColor);
-		DrawSolidRect(batch, Vector2(cardX, y + cardH - 1.5f), Vector2(cardW, std::max(1.0f, 1.5f * uiScale)), edgeColor);
+        const Action::StageRuleDefinition& stageRule = *stageRules[static_cast<std::size_t>(i)];
+        const std::wstring cardTitle = std::wstring(L"ステージ") + std::to_wstring(i + 1) + L"  "
+            + (stageRule.missionName != nullptr ? std::wstring(stageRule.missionName) : L"");
+        const std::wstring cardSummary = stageRule.missionSummary != nullptr ? stageRule.missionSummary : L"";
+        const std::wstring cardTime = UiUtil::ToWStringFixed(stageRule.stageStartTimeSec, 0) + L"秒";
+        const std::wstring cardRelay = L"リレー " + std::to_wstring(stageRule.requiredRelayCount) + L"回";
 
-		const Action::StageRuleDefinition& stageRule = *stageRules[static_cast<size_t>(i)];
-		const wchar_t* durationLabel = L"5分耐久戦";
-		if (i == 0)
-		{
-			durationLabel = L"1分短期戦";
-		}
-		else if (i == 1)
-		{
-			durationLabel = L"3分制圧戦";
-		}
-		const std::wstring stageTitle = std::wstring(durationLabel) + L"  " + stageRule.missionName;
-		ui->Draw(batch, stageTitle, Vector2(cardX + 22.0f * uiScale, y + 10.0f * uiScale), selected ? selectedStyle : normalStyle, 0.84f * uiScale);
-		const float summaryScale = 0.56f * uiScale;
-		const float summaryMaxWidth = cardW - 118.0f * uiScale;
-		const std::wstring summary = stageRule.missionSummary;
-		std::wstring line1 = FitTextWidth(ui, summary, summaryScale, summaryMaxWidth);
-		std::wstring remaining;
-		if (!line1.empty() && line1.back() == L'…')
-		{
-			// 省略になった場合は2行目を出さず、1行目に集約する。
-			remaining.clear();
-		}
-		else if (line1.size() < summary.size())
-		{
-			remaining = summary.substr(line1.size());
-		}
-		std::wstring line2;
-		if (!remaining.empty())
-		{
-			line2 = FitTextWidth(ui, remaining, summaryScale, summaryMaxWidth);
-		}
-		ui->Draw(batch, line1, Vector2(cardX + 16.0f * uiScale, y + 42.0f * uiScale), selected ? selectedStyle : normalStyle, summaryScale);
-		if (!line2.empty())
-		{
-			ui->Draw(batch, line2, Vector2(cardX + 16.0f * uiScale, y + 58.0f * uiScale), selected ? selectedStyle : normalStyle, summaryScale);
-		}
+        ui->Draw(batch, cardTitle, drawPos + Vector2(18.0f * uiScale, 14.0f * uiScale), selected ? accentStyle : titleStyle, (selected ? 0.92f : 0.88f) * uiScale);
+        ui->Draw(
+            batch,
+            FitTextWidth(ui, cardSummary, 0.56f * uiScale, drawSize.x - 178.0f * uiScale),
+            drawPos + Vector2(18.0f * uiScale, 46.0f * uiScale),
+            bodyStyle,
+            0.56f * uiScale);
+        ui->Draw(batch, cardTime, drawPos + Vector2(drawSize.x - 84.0f * uiScale, 18.0f * uiScale), bodyStyle, 0.58f * uiScale);
+        ui->Draw(batch, cardRelay, drawPos + Vector2(drawSize.x - 132.0f * uiScale, 50.0f * uiScale), bodyStyle, 0.52f * uiScale);
+    }
 
-		// カード右端に簡易マップ図を表示し、地形差を視覚で伝える。
-		const Vector2 mapPos(cardX + cardW - 90.0f * uiScale, y + 12.0f * uiScale);
-		const Vector2 mapSize(74.0f * uiScale, 56.0f * uiScale);
-		DrawSolidRect(batch, mapPos, mapSize, selected ? Color(0.07f, 0.16f, 0.1f, 0.86f) : Color(0.06f, 0.08f, 0.1f, 0.78f));
-		DrawSolidRect(batch, mapPos, Vector2(mapSize.x, std::max(1.0f, 1.0f * uiScale)), selected ? Color(0.54f, 0.96f, 0.64f, 0.92f) : Color(0.46f, 0.56f, 0.66f, 0.68f));
+    ui->Draw(
+        batch,
+        L"↑/↓ または W/S: 選択   Enter: 出撃   Tab/F1: 設定   Esc: タイトルへ",
+        Vector2(frameX + 24.0f * uiScale, frameY + frameH - 28.0f * uiScale),
+        helpStyle,
+        0.72f * uiScale);
 
-		switch (i)
-		{
-		case 0:
-			// Stage1: 中央障害物 + 四隅湧き。
-			DrawSolidRect(batch, mapPos + Vector2(30.0f * uiScale, 22.0f * uiScale), Vector2(14.0f * uiScale, 12.0f * uiScale), Color(0.8f, 0.32f, 0.24f, 0.92f));
-			DrawSolidRect(batch, mapPos + Vector2(8.0f * uiScale, 8.0f * uiScale), Vector2(4.0f * uiScale, 4.0f * uiScale), Color(0.34f, 0.9f, 1.0f, 0.86f));
-			DrawSolidRect(batch, mapPos + Vector2(62.0f * uiScale, 8.0f * uiScale), Vector2(4.0f * uiScale, 4.0f * uiScale), Color(0.34f, 0.9f, 1.0f, 0.86f));
-			DrawSolidRect(batch, mapPos + Vector2(8.0f * uiScale, 44.0f * uiScale), Vector2(4.0f * uiScale, 4.0f * uiScale), Color(0.34f, 0.9f, 1.0f, 0.86f));
-			DrawSolidRect(batch, mapPos + Vector2(62.0f * uiScale, 44.0f * uiScale), Vector2(4.0f * uiScale, 4.0f * uiScale), Color(0.34f, 0.9f, 1.0f, 0.86f));
-			break;
-		case 1:
-			// Stage2: 防衛回廊。
-			DrawSolidRect(batch, mapPos + Vector2(8.0f * uiScale, 10.0f * uiScale), Vector2(58.0f * uiScale, 5.0f * uiScale), Color(0.94f, 0.66f, 0.26f, 0.9f));
-			DrawSolidRect(batch, mapPos + Vector2(8.0f * uiScale, 41.0f * uiScale), Vector2(58.0f * uiScale, 5.0f * uiScale), Color(0.94f, 0.66f, 0.26f, 0.9f));
-			DrawSolidRect(batch, mapPos + Vector2(31.0f * uiScale, 20.0f * uiScale), Vector2(12.0f * uiScale, 16.0f * uiScale), Color(0.44f, 0.9f, 1.0f, 0.84f));
-			break;
-		default:
-			// Stage3: 中央高台 + 包囲配置。
-			DrawSolidRect(batch, mapPos + Vector2(26.0f * uiScale, 18.0f * uiScale), Vector2(22.0f * uiScale, 18.0f * uiScale), Color(0.44f, 1.0f, 0.84f, 0.9f));
-			DrawSolidRect(batch, mapPos + Vector2(4.0f * uiScale, 4.0f * uiScale), Vector2(8.0f * uiScale, 6.0f * uiScale), Color(0.92f, 0.34f, 1.0f, 0.82f));
-			DrawSolidRect(batch, mapPos + Vector2(62.0f * uiScale, 4.0f * uiScale), Vector2(8.0f * uiScale, 6.0f * uiScale), Color(0.92f, 0.34f, 1.0f, 0.82f));
-			DrawSolidRect(batch, mapPos + Vector2(4.0f * uiScale, 46.0f * uiScale), Vector2(8.0f * uiScale, 6.0f * uiScale), Color(0.92f, 0.34f, 1.0f, 0.82f));
-			DrawSolidRect(batch, mapPos + Vector2(62.0f * uiScale, 46.0f * uiScale), Vector2(8.0f * uiScale, 6.0f * uiScale), Color(0.92f, 0.34f, 1.0f, 0.82f));
-			break;
-		}
-	}
+    if (m_clickFxTimer > 0.0f)
+    {
+        const float progress = 1.0f - (m_clickFxTimer / kClickFxDurationSec);
+        const float radius = (8.0f + progress * 34.0f) * uiScale;
+        const float alpha = (1.0f - progress) * 0.85f;
+        const Color fxColor(0.72f, 0.96f, 1.0f, alpha);
 
-	const float helpY = std::max(frameY + 8.0f * uiScale, std::min(frameY + frameH - 22.0f * uiScale, height - safeMargin - 18.0f * uiScale));
-	ui->Draw(batch, L"\u4e0a\u4e0b\u30ad\u30fc / W S / A D \u3067\u9078\u629e   Enter\u3067\u51fa\u6483   Esc\u3067\u623b\u308b", Vector2(frameX + 26.0f * uiScale, helpY), helpStyle, 0.74f * uiScale);
+        DrawSolidRect(
+            batch,
+            m_clickFxPos + Vector2(-radius, -1.0f * uiScale),
+            Vector2(radius * 2.0f, 2.0f * uiScale),
+            fxColor);
+        DrawSolidRect(
+            batch,
+            m_clickFxPos + Vector2(-1.0f * uiScale, -radius),
+            Vector2(2.0f * uiScale, radius * 2.0f),
+            fxColor);
+    }
 
-	if (m_clickFxTimer > 0.0f)
-	{
-		const float progress = 1.0f - (m_clickFxTimer / kClickFxDurationSec);
-		const float radius = (7.0f + progress * 40.0f) * uiScale;
-		const float alpha = (1.0f - progress) * 0.86f;
-		const Color fxColor(0.62f, 0.9f, 1.0f, alpha);
-		for (int particle = 0; particle < 12; ++particle)
-		{
-			const float fp = static_cast<float>(particle);
-			const float angle = (DirectX::XM_2PI / 12.0f) * fp + progress * 1.6f;
-			const Vector2 dir(std::cosf(angle), std::sinf(angle));
-			const Vector2 point = m_clickFxPos + dir * radius;
-			const float size = (2.0f + std::fmod(fp, 3.0f)) * uiScale;
-			DrawSolidRect(batch, point - Vector2(size * 0.5f, size * 0.5f), Vector2(size, size), fxColor);
-		}
-
-		const float coreRadius = (3.0f + (1.0f - progress) * 10.0f) * uiScale;
-		DrawSolidRect(batch, m_clickFxPos + Vector2(-coreRadius, -uiScale), Vector2(coreRadius * 2.0f, 2.0f * uiScale), Color(0.96f, 1.0f, 0.98f, alpha * 0.92f));
-		DrawSolidRect(batch, m_clickFxPos + Vector2(-uiScale, -coreRadius), Vector2(2.0f * uiScale, coreRadius * 2.0f), Color(0.96f, 1.0f, 0.98f, alpha * 0.92f));
-	}
-	EndSpriteLayer();
+    EndSpriteLayer();
 }
 
-// 破棄可能なリソースを解放する。
 void StageSelectScene::Finalize()
 {
-	m_uiSolidTexture.Reset();
-	m_textRenderer.reset();
-	m_clickFxTimer = 0.0f;
-	m_clickFxPos = Vector2::Zero;
+    // restore system cursor and return mouse to absolute mode
+    SetSystemCursorVisible(true);
+    DirectX::Mouse::Get().SetMode(DirectX::Mouse::MODE_ABSOLUTE);
+    System::InputManager::GetInstance().ResetMouseDelta();
 }
 
-// SpriteBatch上へ単色矩形を描画する。
 void StageSelectScene::DrawSolidRect(
-	DirectX::SpriteBatch* batch,
-	const Vector2& position,
-	const Vector2& size,
-	const Color& color) const
+    DirectX::SpriteBatch* batch,
+    const Vector2& position,
+    const Vector2& size,
+    const Color& color) const
 {
-	if (batch == nullptr || m_uiSolidTexture == nullptr)
-	{
-		return;
-	}
-	if (size.x <= 0.0f || size.y <= 0.0f)
-	{
-		return;
-	}
+    if (batch == nullptr || m_uiSolidTexture == nullptr)
+    {
+        return;
+    }
+    if (size.x <= 0.0f || size.y <= 0.0f)
+    {
+        return;
+    }
 
-	const DirectX::XMFLOAT2 scale(size.x, size.y);
-	batch->Draw(m_uiSolidTexture.Get(), position, nullptr, color, 0.0f, Vector2::Zero, scale);
+    batch->Draw(
+        m_uiSolidTexture.Get(),
+        position,
+        nullptr,
+        color,
+        0.0f,
+        Vector2::Zero,
+        DirectX::XMFLOAT2(size.x, size.y));
 }
-

@@ -1,10 +1,7 @@
-//------------------------//------------------------
-// Contents(処理内容) 斬撃ヒット演出の生成、更新、描画を実装する。
-//------------------------//------------------------
-// user(作成者) Keishi Teramoto
-// Created date(作成日) 2026 / 03 / 16
-// last updated (最終更新日) 2026 / 03 / 18
-//------------------------//------------------------
+﻿#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
 #include "SlashHitEffectSystem.h"
 
 #include <algorithm>
@@ -16,158 +13,147 @@ using DirectX::SimpleMath::Vector3;
 
 namespace SceneFx
 {
-	namespace
-	{
-		constexpr int kMaxBursts = 16;
-		constexpr int kBloodDropletCount = 15;
-	}
 
-	// 演出状態を初期化する。
-	void SlashHitEffectSystem::Reset()
-	{
-		m_bursts.clear();
-	}
+    void SlashHitEffectSystem::Reset()
+    {
+        for (SlashBurst& burst : m_bursts)
+        {
+            burst = {};
+            burst.active = false;
+        }
+    }
 
-	// ヒット発生位置に演出を生成する。
-	void SlashHitEffectSystem::Spawn(const Vector3& position, float baseYaw, const Color& tint)
-	{
-		SlashBurst burst = {};
-		burst.position = position + Vector3(0.0f, 1.0f, 0.0f);
-		burst.ageSec = 0.0f;
-		burst.lifetimeSec = 0.24f;
-		burst.yaw = baseYaw;
-		burst.seed = baseYaw * 1.618f + position.x * 0.37f + position.z * 0.23f;
-		burst.tint = tint;
-		m_bursts.push_back(burst);
+    void SlashHitEffectSystem::Spawn(const Vector3& position, float baseYaw, const Color& tint, bool killBurst)
+    {
+        size_t slotIndex = kMaxBursts;
+        for (size_t i = 0; i < m_bursts.size(); ++i)
+        {
+            if (!m_bursts[i].active)
+            {
+                slotIndex = i;
+                break;
+            }
+        }
 
-		if (m_bursts.size() > kMaxBursts)
-		{
-			m_bursts.erase(m_bursts.begin(), m_bursts.begin() + (m_bursts.size() - kMaxBursts));
-		}
-	}
+        if (slotIndex == kMaxBursts)
+        {
+            float oldestAge = -1.0f;
+            for (size_t i = 0; i < m_bursts.size(); ++i)
+            {
+                if (m_bursts[i].ageSec > oldestAge)
+                {
+                    oldestAge = m_bursts[i].ageSec;
+                    slotIndex = i;
+                }
+            }
+        }
 
-	// 演出寿命を更新する。
-	void SlashHitEffectSystem::Update(float dt)
-	{
-		if (m_bursts.empty())
-		{
-			return;
-		}
+        SlashBurst& burst = m_bursts[slotIndex];
+        burst = {};
+        burst.position = position + Vector3(0.0f, killBurst ? 1.20f : 1.00f, 0.0f);
+        burst.ageSec = 0.0f;
+        burst.lifetimeSec = killBurst ? 0.18f : 0.10f;
+        burst.yaw = baseYaw;
+        burst.seed = baseYaw * 1.618f + position.x * 0.37f + position.z * 0.23f;
+        burst.tint = tint;
+        burst.killBurst = killBurst;
+        burst.active = true;
+    }
 
-		for (size_t i = 0; i < m_bursts.size(); ++i)
-		{
-			m_bursts[i].ageSec += dt;
-		}
+    void SlashHitEffectSystem::SpawnKill(const Vector3& position, float baseYaw, const Color& tint)
+    {
+        Spawn(position, baseYaw, tint, true);
+    }
 
-		m_bursts.erase(
-			std::remove_if(
-				m_bursts.begin(),
-				m_bursts.end(),
-				[](const SlashBurst& burst)
-				{
-					return burst.ageSec >= burst.lifetimeSec;
-				}),
-			m_bursts.end());
-	}
+    void SlashHitEffectSystem::Update(float dt)
+    {
+        for (SlashBurst& burst : m_bursts)
+        {
+            if (!burst.active)
+            {
+                continue;
+            }
 
-	// 有効な演出を描画する。
-	void SlashHitEffectSystem::Draw(
-		DirectX::GeometricPrimitive& streakMesh,
-		DirectX::GeometricPrimitive& particleMesh,
-		const Matrix& view,
-		const Matrix& proj) const
-	{
-		for (size_t i = 0; i < m_bursts.size(); ++i)
-		{
-			const SlashBurst& burst = m_bursts[i];
-			const float safeLifetime = std::max(0.001f, burst.lifetimeSec);
-			const float lifeT = std::max(0.0f, std::min(1.0f, burst.ageSec / safeLifetime));
-			const float fade = 1.0f - lifeT;
-			const float slashFlash = std::sinf((1.0f - lifeT) * DirectX::XM_PIDIV2);
+            burst.ageSec += dt;
+            if (burst.ageSec >= burst.lifetimeSec)
+            {
+                burst.active = false;
+            }
+        }
+    }
 
-			const Vector3 forward(std::sinf(burst.yaw), 0.0f, std::cosf(burst.yaw));
-			const Vector3 right(forward.z, 0.0f, -forward.x);
-			Vector3 sprayDir = forward + right * 0.62f + Vector3(0.0f, 0.24f, 0.0f);
-			sprayDir.Normalize();
-			const Vector3 burstOrigin = burst.position + forward * 0.10f + Vector3(0.0f, 0.04f, 0.0f);
+    void SlashHitEffectSystem::Draw(
+        DirectX::GeometricPrimitive& streakMesh,
+        DirectX::GeometricPrimitive& particleMesh,
+        const Matrix& view,
+        const Matrix& proj) const
+    {
+        for (const SlashBurst& burst : m_bursts)
+        {
+            if (!burst.active)
+            {
+                continue;
+            }
+            const float safeLifetime = std::max(0.001f, burst.lifetimeSec);
+            const float lifeT = std::clamp(burst.ageSec / safeLifetime, 0.0f, 1.0f);
+            const float fade = 1.0f - lifeT;
 
-			const Color slashShadowColor(0.10f, 0.01f, 0.01f, 0.14f + fade * 0.22f);
-			const Color slashColor(1.0f, 0.97f, 0.94f, 0.30f + fade * 0.52f);
-			const Color slashAccentColor(
-				std::max(0.86f, burst.tint.x),
-				std::max(0.82f, burst.tint.y),
-				std::max(0.82f, burst.tint.z),
-				0.18f + fade * 0.28f);
-			const Color bloodCoreColor(0.86f, 0.05f, 0.05f, 0.18f + fade * 0.54f);
-			const Color bloodEdgeColor(0.58f, 0.02f, 0.03f, 0.12f + fade * 0.32f);
+            const Vector3 forward(std::sin(burst.yaw), 0.0f, std::cos(burst.yaw));
+            const Vector3 right(forward.z, 0.0f, -forward.x);
+            const Vector3 origin = burst.position + forward * 0.08f + Vector3(0.0f, 0.04f, 0.0f);
 
-			const Matrix shadowWorld =
-				Matrix::CreateScale(0.22f, 0.05f, 1.36f - lifeT * 0.20f) *
-				Matrix::CreateRotationZ(0.58f) *
-				Matrix::CreateRotationX(-0.22f) *
-				Matrix::CreateRotationY(burst.yaw - 0.10f) *
-				Matrix::CreateTranslation(burstOrigin + right * 0.08f - forward * 0.04f);
-			streakMesh.Draw(shadowWorld, view, proj, slashShadowColor);
+            const float slashLen = burst.killBurst
+                ? (1.48f - lifeT * 0.18f)
+                : (1.12f - lifeT * 0.10f);
 
-			const Matrix mainSlashWorld =
-				Matrix::CreateScale(0.13f, 0.03f, 1.78f - lifeT * 0.26f) *
-				Matrix::CreateRotationZ(0.62f) *
-				Matrix::CreateRotationX(-0.18f) *
-				Matrix::CreateRotationY(burst.yaw + 0.04f) *
-				Matrix::CreateTranslation(burstOrigin + right * 0.03f);
-			streakMesh.Draw(mainSlashWorld, view, proj, slashColor);
+            const float slashWidth = burst.killBurst
+                ? (0.18f + fade * 0.05f)
+                : (0.13f + fade * 0.03f);
 
-			const Matrix accentSlashWorld =
-				Matrix::CreateScale(0.07f, 0.022f, 1.14f - lifeT * 0.14f) *
-				Matrix::CreateRotationZ(-0.36f) *
-				Matrix::CreateRotationX(0.14f) *
-				Matrix::CreateRotationY(burst.yaw + 0.34f) *
-				Matrix::CreateTranslation(burstOrigin + right * 0.22f + forward * 0.10f + Vector3(0.0f, 0.03f, 0.0f));
-			streakMesh.Draw(accentSlashWorld, view, proj, slashAccentColor);
+            const Color slashColor(
+                std::clamp(burst.tint.R() * 1.05f, 0.0f, 1.0f),
+                std::clamp(burst.tint.G() * 1.05f, 0.0f, 1.0f),
+                std::clamp(burst.tint.B() * 1.05f, 0.0f, 1.0f),
+                burst.killBurst ? (0.30f + fade * 0.40f) : (0.24f + fade * 0.32f));
 
-			for (int dropletIndex = 0; dropletIndex < kBloodDropletCount; ++dropletIndex)
-			{
-				const float fd = static_cast<float>(dropletIndex);
-				const float spreadT = fd / static_cast<float>(std::max(1, kBloodDropletCount - 1));
-				const float phase = burst.seed + fd * 0.79f;
-				const float distance = (0.15f + spreadT * 1.04f) * (0.66f + slashFlash * 0.72f);
-				const float lateral = (spreadT - 0.5f) * (0.34f + spreadT * 0.60f) + std::sinf(phase * 1.4f) * 0.05f;
-				const float lift = 0.06f + (1.0f - spreadT) * 0.08f + std::cosf(phase * 1.7f) * 0.03f - lifeT * 0.12f;
-				const float squash = 0.07f + std::fmod(fd, 3.0f) * 0.025f;
-				const float length = squash * (1.15f + spreadT * 1.8f);
-				const Vector3 dropletPos =
-					burstOrigin +
-					sprayDir * distance +
-					right * lateral +
-					Vector3(0.0f, lift, 0.0f);
-				const float dropletYaw = burst.yaw + 0.28f + std::sinf(phase) * 0.42f;
-				const float dropletPitch = -0.18f + std::cosf(phase * 1.3f) * 0.16f;
-				const Color dropletColor = (dropletIndex % 3 == 0) ? bloodEdgeColor : bloodCoreColor;
-				const Matrix dropletWorld =
-					Matrix::CreateScale(squash, 0.028f + spreadT * 0.02f, length) *
-					Matrix::CreateRotationX(dropletPitch) *
-					Matrix::CreateRotationY(dropletYaw) *
-					Matrix::CreateTranslation(dropletPos);
-				streakMesh.Draw(dropletWorld, view, proj, dropletColor);
-			}
+            const Color flashColor(
+                std::clamp(burst.tint.R() * 1.18f + 0.12f, 0.0f, 1.0f),
+                std::clamp(burst.tint.G() * 1.18f + 0.12f, 0.0f, 1.0f),
+                std::clamp(burst.tint.B() * 1.18f + 0.12f, 0.0f, 1.0f),
+                burst.killBurst ? (0.22f + fade * 0.34f) : (0.18f + fade * 0.24f));
 
-			for (int blotIndex = 0; blotIndex < 3; ++blotIndex)
-			{
-				const float fb = static_cast<float>(blotIndex);
-				const float phase = burst.seed * (1.2f + fb * 0.17f) + fb * 1.41f;
-				const float distance = 0.18f + fb * 0.16f + slashFlash * 0.14f;
-				const Vector3 blotPos =
-					burstOrigin +
-					sprayDir * distance +
-					right * (-0.12f + fb * 0.12f + std::sinf(phase) * 0.04f) +
-					Vector3(0.0f, 0.02f + std::cosf(phase) * 0.02f, 0.0f);
-				const float blotScale = 0.09f + fb * 0.05f + slashFlash * 0.03f;
-				const Matrix blotWorld =
-					Matrix::CreateScale(blotScale * 0.95f, blotScale * 0.50f, blotScale * 0.72f) *
-					Matrix::CreateRotationY(burst.yaw + std::sinf(phase) * 0.55f) *
-					Matrix::CreateTranslation(blotPos);
-				particleMesh.Draw(blotWorld, view, proj, (blotIndex == 1) ? bloodCoreColor : bloodEdgeColor);
-			}
-		}
-	}
+            const Matrix slashWorld =
+                Matrix::CreateScale(slashWidth, 0.026f, slashLen) *
+                Matrix::CreateRotationZ(0.58f) *
+                Matrix::CreateRotationX(-0.16f) *
+                Matrix::CreateRotationY(burst.yaw) *
+                Matrix::CreateTranslation(origin);
+            streakMesh.Draw(slashWorld, view, proj, slashColor);
+
+            const float flashScale = burst.killBurst
+                ? (0.28f + fade * 0.12f)
+                : (0.20f + fade * 0.08f);
+            const Matrix flashWorld =
+                Matrix::CreateScale(flashScale, flashScale * 0.52f, flashScale) *
+                Matrix::CreateTranslation(origin + right * 0.04f);
+            particleMesh.Draw(flashWorld, view, proj, flashColor);
+
+            if (burst.killBurst)
+            {
+                const float ringScale = 0.36f + lifeT * 0.70f;
+                const Matrix ringWorld =
+                    Matrix::CreateScale(ringScale, 0.026f, ringScale) *
+                    Matrix::CreateTranslation(origin + Vector3(0.0f, 0.03f, 0.0f));
+                particleMesh.Draw(
+                    ringWorld,
+                    view,
+                    proj,
+                    Color(
+                        std::clamp(burst.tint.R() * 1.08f, 0.0f, 1.0f),
+                        std::clamp(burst.tint.G() * 1.08f, 0.0f, 1.0f),
+                        std::clamp(burst.tint.B() * 1.08f, 0.0f, 1.0f),
+                        0.10f + fade * 0.18f));
+            }
+        }
+    }
 }

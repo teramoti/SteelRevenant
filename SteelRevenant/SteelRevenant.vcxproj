@@ -1,8 +1,14 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
-    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
-    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
@@ -13,12 +19,17 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType><UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset><CharacterSet>Unicode</CharacterSet>
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType><UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset><WholeProgramOptimization>true</WholeProgramOptimization><CharacterSet>Unicode</CharacterSet>
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings" />
@@ -44,31 +55,43 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <WarningLevel>Level3</WarningLevel><SDLCheck>true</SDLCheck>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Source;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <SubSystem>Windows</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>d3d11.lib;dxgi.lib;d3dcompiler.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
-    <ResourceCompile><PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions></ResourceCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <WarningLevel>Level3</WarningLevel><SDLCheck>true</SDLCheck>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard>
-      <FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)Source;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding>
-      <OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>d3d11.lib;dxgi.lib;d3dcompiler.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
-    <ResourceCompile><PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions></ResourceCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
     <!-- ルート -->
@@ -104,20 +127,27 @@
     <ClCompile Include="Source\Scene\GameScene\GameSceneHud.cpp" />
     <ClCompile Include="Source\Scene\GameScene\GameSceneStage.cpp" />
     <ClCompile Include="Source\Scene\GameScene\GameSceneUpdate.cpp" />
+    <ClCompile Include="Source\Scene\GameScene\GameSceneWorldArena.cpp">
+      <ObjectFileName>$(IntDir)GameSceneWorldArenaCore.obj</ObjectFileName>
+    </ClCompile>
     <ClCompile Include="Source\Scene\GameScene\GameSceneWorldRender.cpp" />
     <ClCompile Include="Source\Scene\GameScene\PlayerVisualProfile.cpp" />
     <ClCompile Include="Source\Scene\GameScene\SlashHitEffectSystem.cpp" />
     <ClCompile Include="Source\Scene\GameScene\StageFloorStyle.cpp" />
     <!-- Visual/ サブフォルダ（旧直下の重複版は削除済み） -->
     <ClCompile Include="Source\Scene\GameScene\Visual\GameSceneWorldActors.cpp" />
-    <ClCompile Include="Source\Scene\GameScene\Visual\GameSceneWorldArena.cpp" />
-    <ClCompile Include="Source\Scene\GameScene\Visual\GameSceneWorldBackdrop.cpp" />
+    <ClCompile Include="Source\Scene\GameScene\Visual\GameSceneWorldArena.cpp">
+      <ObjectFileName>$(IntDir)GameSceneWorldArenaVisual.obj</ObjectFileName>
+    </ClCompile>
     <!-- Scene その他 -->
     <ClCompile Include="Source\Scene\ResultScene\ResultScene.cpp" />
     <ClCompile Include="Source\Scene\SceneManager\SceneManager.cpp" />
     <ClCompile Include="Source\Scene\SettingsScene\SettingsScene.cpp" />
     <ClCompile Include="Source\Scene\StageSelectScene\StageSelectScene.cpp" />
     <ClCompile Include="Source\Scene\TitleScene\TitleScene.cpp" />
+    <!-- Rendering -->
+    <ClCompile Include="Source\Rendering\HudRenderer.cpp" />
+    <ClCompile Include="Source\Rendering\WorldRenderer.cpp" />
     <!-- Utility -->
     <ClCompile Include="Source\Utility\DirectX11.cpp" />
     <ClCompile Include="Source\Utility\Math.cpp" />
@@ -127,6 +157,7 @@
     <!-- ルートヘッダ -->
     <ClInclude Include="CheckMemory.h" />
     <ClInclude Include="Game.h" />
+    <ClInclude Include="Source\GameSystem\UIConfig.h" />
     <ClInclude Include="StepTimer.h" />
     <ClInclude Include="Window.h" />
     <!-- Action -->
@@ -207,6 +238,10 @@
     <ResourceCompile Include="resource.rc" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="build.bat" />
+    <None Include="BUILD_NOTES.md" />
+    <None Include="package.ps1" />
+    <None Include="README.md" />
     <None Include="settings.manifest" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
