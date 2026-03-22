@@ -17,6 +17,8 @@
 #include "GameSceneUpdate.h"
 #include "GameSceneHud.h"
 #include "GameSceneFlow.h"
+#include "GameScenePauseController.h"
+#include "FollowCameraController.h"
 #include "SlashHitEffectSystem.h"
 #include "StageFloorStyle.h"
 
@@ -26,6 +28,7 @@
 #include "../../Action/GameState.h"
 #include "../../Action/PathGrid.h"
 #include "../../Action/SurvivalDirector.h"
+#include "../../GameSystem/Camera.h"
 
 class GameScene : public IScene
 {
@@ -47,6 +50,13 @@ private:
     void HandleEnemyDefeatEvents();
     void CompactEnemyStateArrays();
     void UpdateScore(float dt);
+
+    // UpdateBattle から分離したサブ責務
+    Action::InputSnapshot BuildInputSnapshot(float dt) const;
+    void ToggleLockOn(const Action::InputSnapshot& snap);
+    void ApplySwingHitFeedback(int prevKillCount);
+    void SyncWaveProgress(float dt);
+    void CollectDropItems(float dt);
 
     void DrawWorld();
     void DrawWorldBackdrop();
@@ -91,6 +101,8 @@ private:
     GameSceneUpdate m_dropSystem;
     GameSceneHud m_hud;
     GameSceneFlow m_flow;
+    GameScenePauseController m_pauseController;
+    Camera::FollowCameraController m_cameraController;
     SceneFx::SlashHitEffectSystem m_slashHitEffects;
     std::unique_ptr<IFloorStyle> m_floorStyle;
 
@@ -101,7 +113,6 @@ private:
     Action::GameState m_gameState;
     std::vector<Action::EnemyState> m_enemies;
     std::vector<Action::EnemyStateType> m_enemyPrevStates;
-    // front-end laser prev arrays removed to centralize audio in CombatSystem
     std::vector<DirectX::SimpleMath::Matrix> m_obstacleWorlds;
 
     Action::SurvivalDirector m_survivalDirector;
@@ -124,18 +135,6 @@ private:
     DirectX::SimpleMath::Matrix m_view;
     DirectX::SimpleMath::Matrix m_proj;
     DirectX::SimpleMath::Matrix m_projection;
-    DirectX::SimpleMath::Vector3 m_cameraPos;
-    DirectX::SimpleMath::Vector3 m_cameraTarget;
-
-    // camera control (TPS / over-the-shoulder)
-    float m_cameraYaw = 0.0f;      // world yaw of camera
-    float m_cameraPitch = 0.0f;    // camera pitch
-    float m_cameraShoulder = 0.35f; // lateral offset multiplier (meters)
-    float m_cameraLag = 0.12f;     // smoothing factor
-    float m_cameraPitchMin = -1.309f; // -75deg
-    float m_cameraPitchMax = 1.309f;  // +75deg
-    float m_cameraFov = 3.14159265f/4.0f; // current fov
-    float m_cameraTargetFov = 3.14159265f/4.0f;
 
     float m_sceneTime = 0.0f;
     float m_hitstopTimer = 0.0f;
@@ -149,10 +148,7 @@ private:
     float m_scoreAccum = 0.0f;
     int m_announcedWave = 1;
 
-    DirectX::SpriteBatch*                  m_spriteBatch = nullptr; // DrawManager borrowed
-    std::unique_ptr<DirectX::SpriteFont>   m_fontOwned;               // owned SpriteFont
-    DirectX::SpriteFont*                   m_font        = nullptr;  // raw pointer to owned font (or external)
-
-    bool m_isPaused = false;
-    int m_pauseSelected = 0;
+    DirectX::SpriteBatch*                  m_spriteBatch = nullptr;
+    std::unique_ptr<DirectX::SpriteFont>   m_fontOwned;
+    DirectX::SpriteFont*                   m_font        = nullptr;
 };

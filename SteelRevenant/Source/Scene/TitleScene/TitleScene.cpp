@@ -298,10 +298,10 @@ void TitleScene::Initialize()
         m_font = LoadTitleFont();
     }
 
-    // keyboard-only title: hide cursor and don't rely on mouse coordinates
-    DirectX::Mouse::Get().SetMode(DirectX::Mouse::MODE_RELATIVE);
+    // マウスでも操作できるようにする（絶対モード、有効なシステムカーソル）
+    DirectX::Mouse::Get().SetMode(DirectX::Mouse::MODE_ABSOLUTE);
     System::InputManager::GetInstance().ResetMouseDelta();
-    SetCursorVisible(false);
+    SetCursorVisible(true);
     m_selectedIndex = 0;
 
     // menu items (Japanese)
@@ -413,13 +413,48 @@ void TitleScene::Update(const DX::StepTimer& timer)
     const System::InputManager& input = System::InputManager::GetInstance();
 
     bool anyInput = false;
-    // keyboard navigation only
+    // keyboard navigation
     if (input.IsKeyPressed(DirectX::Keyboard::Up)) { m_selectedIndex = (m_selectedIndex - 1 + static_cast<int>(m_menuItems.size())) % static_cast<int>(m_menuItems.size()); anyInput = true; }
     if (input.IsKeyPressed(DirectX::Keyboard::Down)) { m_selectedIndex = (m_selectedIndex + 1) % static_cast<int>(m_menuItems.size()); anyInput = true; }
 
     // also support W/S
     if (input.IsKeyPressed(DirectX::Keyboard::W)) { m_selectedIndex = (m_selectedIndex - 1 + static_cast<int>(m_menuItems.size())) % static_cast<int>(m_menuItems.size()); anyInput = true; }
     if (input.IsKeyPressed(DirectX::Keyboard::S)) { m_selectedIndex = (m_selectedIndex + 1) % static_cast<int>(m_menuItems.size()); anyInput = true; }
+
+    // マウス操作: ホバーで選択、左クリックで決定
+    const DirectX::Mouse::State* ms = input.GetMouseState();
+    if (ms)
+    {
+        const float width = static_cast<float>(DirectX11::Get().GetWidth());
+        const float height = static_cast<float>(DirectX11::Get().GetHeight());
+        const float menuX = 78.0f;
+        const float menuY = height * 0.56f;
+        const float menuW = 320.0f;
+        const float menuH = 56.0f;
+        for (int i = 0; i < static_cast<int>(m_menuItems.size()); ++i)
+        {
+            const float y = menuY + i * (menuH + 16.0f);
+            if (ms->x >= menuX && ms->x <= menuX + menuW && ms->y >= y && ms->y <= y + menuH)
+            {
+                if (m_selectedIndex != i) { m_selectedIndex = i; GameAudio::AudioSystem::GetInstance().PlaySe(GameAudio::SeId::UiMove, 0.16f); }
+                anyInput = true;
+                if (input.IsMouseButtonPressed(0))
+                {
+                    // emulate Enter
+                    if (g_sceneManager != nullptr)
+                    {
+                        const std::wstring& sel = m_menuItems[m_selectedIndex];
+                        if (sel == L"出撃") { g_sceneManager->RequestTransition(STAGE_SELECT_SCENE); }
+                        else if (sel == L"設定") { g_sceneManager->RequestTransition(SETTINGS_SCENE); }
+                        else if (sel == L"終了") { extern void ExitGame(); ExitGame(); }
+                    }
+                }
+            }
+        }
+
+        // クリックや移動を入力と見なす
+        if (ms->x != 0 || ms->y != 0 || ms->leftButton || ms->rightButton) anyInput = true;
+    }
 
     // toggle UI variant (F2)
     if (input.IsKeyPressed(DirectX::Keyboard::F2))
@@ -613,7 +648,7 @@ void TitleScene::Render()
     drawRect(titlePanelX, titlePanelY, titlePanelW, 3.0f, Color(0.50f, 0.82f, 1.0f, 0.96f));
 
     m_font->DrawString(m_spriteBatch, L"SteelRevenant", DirectX::XMFLOAT2(titlePanelX + 22.0f, titlePanelY + 16.0f), Color(0.96f, 0.98f, 1.0f, 1.0f), 0.0f, DirectX::XMFLOAT2(0, 0), 1.58f);
-    m_font->DrawString(m_spriteBatch, L"3D CLOSE-COMBAT SURVIVAL ACTION", DirectX::XMFLOAT2(titlePanelX + 24.0f, titlePanelY + 72.0f), Color(0.64f, 0.88f, 1.0f, 0.92f), 0.0f, DirectX::XMFLOAT2(0, 0), 0.64f);
+    m_font->DrawString(m_spriteBatch, L"近接主体の3Dサバイバルアクション", DirectX::XMFLOAT2(titlePanelX + 24.0f, titlePanelY + 72.0f), Color(0.64f, 0.88f, 1.0f, 0.92f), 0.0f, DirectX::XMFLOAT2(0, 0), 0.64f);
     m_font->DrawString(m_spriteBatch, L"斬り込み、守り、押し返す。短時間で密度の高い近接戦を捌く。", DirectX::XMFLOAT2(titlePanelX + 24.0f, titlePanelY + 104.0f), Color(0.82f, 0.88f, 0.94f, 0.94f), 0.0f, DirectX::XMFLOAT2(0, 0), 0.70f);
 
     if (m_demoMode)
@@ -621,10 +656,10 @@ void TitleScene::Render()
         const float pulse = 0.50f + 0.50f * std::sin(m_demoTimer * 2.6f);
         drawRect(width * 0.60f, 84.0f, 280.0f, 110.0f, Color(0.04f, 0.08f, 0.12f, 0.68f));
         drawRect(width * 0.60f, 84.0f, 280.0f, 3.0f, Color(1.0f, 0.78f, 0.28f, 0.94f));
-        m_font->DrawString(m_spriteBatch, L"ATTRACT DEMO", DirectX::XMFLOAT2(width * 0.60f + 18.0f, 104.0f), Color(1.0f, 0.84f, 0.42f, 0.96f), 0.0f, DirectX::XMFLOAT2(0, 0), 0.88f);
-        const std::wstring stageText = std::wstring(L"STAGE ") + std::to_wstring(frontStage) + (frontStage == 1 ? L"  DEFENSE CORRIDOR" : (frontStage == 2 ? L"  CORE SECTOR" : L"  OVERDRIVE GRID"));
+        m_font->DrawString(m_spriteBatch, L"デモ再生", DirectX::XMFLOAT2(width * 0.60f + 18.0f, 104.0f), Color(1.0f, 0.84f, 0.42f, 0.96f), 0.0f, DirectX::XMFLOAT2(0, 0), 0.88f);
+        const std::wstring stageText = std::wstring(L"ステージ ") + std::to_wstring(frontStage) + (frontStage == 1 ? L"  外縁区画" : (frontStage == 2 ? L"  防衛回廊" : L"  中枢区画"));
         m_font->DrawString(m_spriteBatch, stageText.c_str(), DirectX::XMFLOAT2(width * 0.60f + 18.0f, 138.0f), Color(0.86f, 0.92f, 1.0f, 0.94f), 0.0f, DirectX::XMFLOAT2(0, 0), 0.68f);
-        m_font->DrawString(m_spriteBatch, L"PRESS ANY KEY TO RETURN", DirectX::XMFLOAT2(width * 0.60f + 18.0f, 164.0f), Color(1.0f, 0.92f, 0.62f, 0.48f + pulse * 0.52f), 0.0f, DirectX::XMFLOAT2(0, 0), 0.72f);
+        m_font->DrawString(m_spriteBatch, L"キーを押すと戻る", DirectX::XMFLOAT2(width * 0.60f + 18.0f, 164.0f), Color(1.0f, 0.92f, 0.62f, 0.48f + pulse * 0.52f), 0.0f, DirectX::XMFLOAT2(0, 0), 0.72f);
     }
     else
     {
@@ -647,13 +682,13 @@ void TitleScene::Render()
 
         drawRect(width * 0.64f, height * 0.62f, 310.0f, 132.0f, Color(0.03f, 0.05f, 0.08f, 0.56f));
         drawRect(width * 0.64f, height * 0.62f, 310.0f, 3.0f, Color(0.32f, 0.72f, 1.0f, 0.88f));
-        m_font->DrawString(m_spriteBatch, L"TACTICAL OVERVIEW", DirectX::XMFLOAT2(width * 0.64f + 18.0f, height * 0.62f + 16.0f), Color(0.70f, 0.92f, 1.0f, 0.96f), 0.0f, DirectX::XMFLOAT2(0, 0), 0.72f);
+        m_font->DrawString(m_spriteBatch, L"戦術概要", DirectX::XMFLOAT2(width * 0.64f + 18.0f, height * 0.62f + 16.0f), Color(0.70f, 0.92f, 1.0f, 0.96f), 0.0f, DirectX::XMFLOAT2(0, 0), 0.72f);
         m_font->DrawString(m_spriteBatch, L"- 近接主体の3Dアクション", DirectX::XMFLOAT2(width * 0.64f + 22.0f, height * 0.62f + 48.0f), Color(0.88f, 0.92f, 0.96f, 0.94f), 0.0f, DirectX::XMFLOAT2(0, 0), 0.62f);
         m_font->DrawString(m_spriteBatch, L"- ステージ毎に敵構成と圧力が変化", DirectX::XMFLOAT2(width * 0.64f + 22.0f, height * 0.62f + 72.0f), Color(0.88f, 0.92f, 0.96f, 0.94f), 0.0f, DirectX::XMFLOAT2(0, 0), 0.62f);
-        m_font->DrawString(m_spriteBatch, L"- 放置時は3D ATTRACTへ移行", DirectX::XMFLOAT2(width * 0.64f + 22.0f, height * 0.62f + 96.0f), Color(0.88f, 0.92f, 0.96f, 0.94f), 0.0f, DirectX::XMFLOAT2(0, 0), 0.62f);
+        m_font->DrawString(m_spriteBatch, L"- 放置時は3D デモに移行", DirectX::XMFLOAT2(width * 0.64f + 22.0f, height * 0.62f + 96.0f), Color(0.88f, 0.92f, 0.96f, 0.94f), 0.0f, DirectX::XMFLOAT2(0, 0), 0.62f);
 
         const float promptAlpha = 0.26f + 0.74f * (0.5f + 0.5f * std::sin(m_blink * 4.2f));
-        m_font->DrawString(m_spriteBatch, L"PRESS ANY KEY", DirectX::XMFLOAT2(width * 0.50f - 122.0f, height * 0.86f), Color(1.0f, 0.90f, 0.58f, promptAlpha), 0.0f, DirectX::XMFLOAT2(0, 0), 0.92f);
+        m_font->DrawString(m_spriteBatch, L"キーまたはクリックで操作", DirectX::XMFLOAT2(width * 0.50f - 122.0f, height * 0.86f), Color(1.0f, 0.90f, 0.58f, promptAlpha), 0.0f, DirectX::XMFLOAT2(0, 0), 0.92f);
     }
 
     m_font->DrawString(m_spriteBatch, L"W / S で選択   Enter / Space で決定   18秒放置で3D DEMO", DirectX::XMFLOAT2(32.0f, height - 44.0f), Color(0.78f, 0.82f, 0.88f, 0.92f), 0.0f, DirectX::XMFLOAT2(0, 0), 0.66f);

@@ -4,6 +4,7 @@
 
 #include "ResultScene.h"
 
+#include "../Base/SceneUiSound.h"
 #include "../../GameSystem/InputManager.h"
 #include "../../GameSystem/DrawManager.h"
 #include "../../GameSystem/GameSaveData.h"
@@ -238,9 +239,10 @@ void ResultScene::Update(const DX::StepTimer& timer)
             const float ix = bx + i * (bw + gap);
             if (ms->x >= ix && ms->x <= ix + bw && ms->y >= by && ms->y <= by + bh)
             {
-                m_selectedIndex = i;
+                if (m_selectedIndex != i) { m_selectedIndex = i; SceneUiSound::PlayMove(); }
                 if (input.IsMouseButtonPressed(0))
                 {
+                    SceneUiSound::PlayConfirm();
                     break;
                 }
             }

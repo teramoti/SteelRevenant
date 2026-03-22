@@ -19,9 +19,6 @@ namespace Action
 		// 数値パラメータ
 		float stageStartTimeSec;
 		float resultDelaySec;
-		int requiredRelayCount;
-		float relayTimeBonusSec;
-		float beaconTimeBonusSec;
 		int killRampStep;
 		float timeRampStepSec;
 		int openingAliveCount;
@@ -63,9 +60,6 @@ namespace Action
 
 		float GetStageStartTimeSec() const;
 		float GetResultDelaySec() const;
-		int GetRequiredRelayCount() const;
-		float GetRelayTimeBonusSec() const;
-		float GetBeaconTimeBonusSec() const;
 		int GetKillRampStep() const;
 		float GetTimeRampStepSec() const;
 		int GetOpeningAliveCount() const;

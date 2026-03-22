@@ -27,11 +27,11 @@ namespace GameSceneVisualPalette
     constexpr Color speedItemColor  { 0.10f, 1.00f, 0.50f, 1.00f };
     constexpr Color healthItemColor { 1.00f, 0.20f, 0.20f, 1.00f };
 
-    constexpr Color playerBodyColor  { 0.55f, 0.65f, 0.80f, 1.0f };
-    constexpr Color playerSwordColor { 0.85f, 0.88f, 0.95f, 1.0f };
-    constexpr Color playerGuardColor { 0.30f, 0.60f, 1.00f, 1.0f };
-    constexpr Color enemyRushColor   { 0.75f, 0.20f, 0.15f, 1.0f };
-    constexpr Color enemyFlankColor  { 0.55f, 0.15f, 0.55f, 1.0f };
+    constexpr Color playerBodyColor  { 0.28f, 0.38f, 0.62f, 1.0f }; // より落ち着いた青
+    constexpr Color playerSwordColor { 0.95f, 0.92f, 0.80f, 1.0f }; // 刃は明るめ
+    constexpr Color playerGuardColor { 0.18f, 0.48f, 0.92f, 1.0f }; // ガードエフェクトの色
+    constexpr Color enemyRushColor   { 0.85f, 0.25f, 0.18f, 1.0f };
+    constexpr Color enemyFlankColor  { 0.60f, 0.18f, 0.60f, 1.0f };
     constexpr Color enemyDeadColor   { 0.25f, 0.10f, 0.10f, 1.0f };
     constexpr Color enemyHitColor    { 1.00f, 0.60f, 0.10f, 1.0f };
 
@@ -40,4 +40,5 @@ namespace GameSceneVisualPalette
     constexpr Color hpBarMidColor  { 0.90f, 0.70f, 0.05f, 1.0f };
     constexpr Color hpBarLowColor  { 0.90f, 0.15f, 0.10f, 1.0f };
 }
+
 

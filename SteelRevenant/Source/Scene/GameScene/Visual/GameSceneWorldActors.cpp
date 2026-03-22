@@ -25,6 +25,22 @@ namespace
 	constexpr float kEnemySpawnDurationSec = 0.4f;
 	constexpr float kEnemyAttackWindupVisualSec = 0.45f;
 
+	// 剣の保持基準点オフセット定数
+	// rearGripWorld（後手・右手側）からの各部位までの距離
+	constexpr float kGripToFrontHand   = 0.18f; // 前手（左手/補助側）のグリップ位置
+	constexpr float kGripToGuard       = 0.26f; // 鍔中心までの距離
+	constexpr float kGripToBladeCenter = 0.90f; // 刃中心（m_weaponMesh 描画基準）
+	// 肩ソケット位置（pRoot ローカル座標）
+	constexpr float kLeftShoulderX  = -0.24f;
+	constexpr float kLeftShoulderY  =  1.20f;
+	constexpr float kLeftShoulderZ  =  0.04f;
+	constexpr float kRightShoulderX =  0.24f;
+	constexpr float kRightShoulderY =  1.20f;
+	constexpr float kRightShoulderZ =  0.04f;
+	// 腕のメッシュ半径
+	constexpr float kLeftArmRadius  = 0.070f;
+	constexpr float kRightArmRadius = 0.074f;
+
 	const Color kBladeColor = { 0.80f, 0.84f, 0.90f, 1.0f };
 	const Color kBladeEdgeColor = { 0.95f, 0.97f, 1.00f, 1.0f };
 	const Color kBladeFullerColor = { 0.52f, 0.55f, 0.62f, 1.0f };
@@ -137,13 +153,15 @@ void GameScene::DrawWorldActors()
 
 	const GreatswordPose guardPose =
 	{
-		Vector3(0.08f, 0.88f + std::fabs(runCycle) * 0.012f, 0.20f),
-		0.02f,
-		std::fabs(runCycle) * 0.016f,
-		0.04f,
-		0.06f,
-		-0.65f,
-		0.08f
+		// gripLocal: pRoot ローカル座標での後手グリップ位置
+		// X=右寄り（右肩 0.24 に近づけて腕の横伸びを抑制）、Y=腹〜胸高さ、Z=体前方への突き出し最小化
+		Vector3(0.14f, 0.92f + std::fabs(runCycle) * 0.012f, 0.14f),
+		0.02f,                        // rootYawOffset: 体の向き微補正
+		std::fabs(runCycle) * 0.016f, // rootLift: 走行時の上下揺れ
+		0.04f,                        // rootForward: 体の前進オフセット
+		0.10f,                        // bladeYaw: 刃を正面より外向きに（構えらしさ）
+		-0.72f,                       // bladePitch: 刃先を前上方へ向けて自然な構えにする
+		0.08f                         // bladeRoll: 刃の傾き微調整
 	};
 
 	GreatswordPose windupPose = guardPose;
@@ -284,18 +302,16 @@ void GameScene::DrawWorldActors()
 	const Matrix bladeRot = SampleBladeRotation(attackInProgress ? attackBlend : 0.0f);
 	Vector3 bladeDir = SafeNormalize(Vector3::TransformNormal(Vector3::UnitY, bladeRot), Vector3::UnitY);
 	Vector3 bladeRight = SafeNormalize(Vector3::TransformNormal(Vector3::UnitX, bladeRot), Vector3::UnitX);
-	// adjust grip local Z slightly toward the body to reduce floating artifact
-	Vector3 gripLocalAdj = currentPose.gripLocal;
-	gripLocalAdj.z *= 0.85f;
-	const Vector3 rearGripWorld = Vector3::Transform(gripLocalAdj, pRoot);
-	const Vector3 frontGripWorld = rearGripWorld + bladeDir * 0.18f;
-	const Vector3 guardCenter = rearGripWorld + bladeDir * 0.26f;
-	const Vector3 weaponCenter = rearGripWorld + bladeDir * 0.90f;
-	const Vector3 leftShoulderWorld = Vector3::Transform(Vector3(-0.24f, 1.20f, 0.04f), pRoot);
-	const Vector3 rightShoulderWorld = Vector3::Transform(Vector3(0.24f, 1.20f, 0.04f), pRoot);
+	// pRoot ローカル座標の gripLocal をワールド座標に変換して後手グリップ位置とする
+	const Vector3 rearGripWorld  = Vector3::Transform(currentPose.gripLocal, pRoot);
+	const Vector3 frontGripWorld = rearGripWorld + bladeDir * kGripToFrontHand;
+	const Vector3 guardCenter    = rearGripWorld + bladeDir * kGripToGuard;
+	const Vector3 weaponCenter   = rearGripWorld + bladeDir * kGripToBladeCenter;
+	const Vector3 leftShoulderWorld  = Vector3::Transform(Vector3(kLeftShoulderX,  kLeftShoulderY,  kLeftShoulderZ),  pRoot);
+	const Vector3 rightShoulderWorld = Vector3::Transform(Vector3(kRightShoulderX, kRightShoulderY, kRightShoulderZ), pRoot);
 
-	DrawLimb(leftShoulderWorld, frontGripWorld, 0.070f, pv.underColor);
-	DrawLimb(rightShoulderWorld, rearGripWorld, 0.074f, pv.underColor);
+	DrawLimb(leftShoulderWorld,  frontGripWorld, kLeftArmRadius,  pv.underColor);
+	DrawLimb(rightShoulderWorld, rearGripWorld,  kRightArmRadius, pv.underColor);
 	m_enemyMesh->Draw(Matrix::CreateScale(0.055f) * Matrix::CreateTranslation(frontGripWorld), m_view, m_proj, pv.trimColor);
 	m_enemyMesh->Draw(Matrix::CreateScale(0.060f) * Matrix::CreateTranslation(rearGripWorld), m_view, m_proj, pv.trimColor);
 
@@ -321,58 +337,21 @@ void GameScene::DrawWorldActors()
 	m_obstacleMesh->Draw(Matrix::CreateScale(0.054f, 0.032f, 0.054f) * bladeRot * Matrix::CreateTranslation(rearGripWorld - bladeDir * 0.16f), m_view, m_proj, kGuardTrimColor);
 
 	m_player.swingTrailBase = rearGripWorld + bladeDir * 1.00f;
-	m_player.swingTrailTip = rearGripWorld + bladeDir * 1.68f;
+	m_player.swingTrailTip  = rearGripWorld + bladeDir * 1.68f;
+
+	// 攻撃 Active フェーズ中のみ刃位置をサンプルとして記録する
 	if (m_player.swingTrailActive && attackInProgress)
 	{
-		Vector3 previousMid = m_player.swingTrailBase;
-		Vector3 previousTip = m_player.swingTrailTip;
-		for (int sampleIndex = 1; sampleIndex < 5; ++sampleIndex)
-		{
-			const float sampleAlpha = 1.0f - static_cast<float>(sampleIndex) / 5.0f;
-			const float sampleT = Utility::MathEx::Clamp(attackBlend - sampleAlpha * 0.15f, 0.0f, 1.0f);
-			const GreatswordPose samplePose = SampleGreatswordPose(sampleT);
-			const Matrix sampleRoot =
-				Matrix::CreateRotationY(m_player.yaw + samplePose.rootYawOffset) *
-				Matrix::CreateTranslation(
-					m_player.position +
-					forward * samplePose.rootForward +
-					Vector3(0.0f, std::sinf(m_sceneTime * 4.4f) * 0.04f + samplePose.rootLift, 0.0f));
-			const Matrix sampleRot = SampleBladeRotation(sampleT);
-			const Vector3 sampleDir = SafeNormalize(Vector3::TransformNormal(Vector3::UnitY, sampleRot), bladeDir);
-			const Vector3 sampleGrip = Vector3::Transform(samplePose.gripLocal, sampleRoot);
-			const Vector3 midPos = sampleGrip + sampleDir * 1.00f;
-			const Vector3 tipPos = sampleGrip + sampleDir * 1.68f;
-			const Vector3 currentCenter = (midPos + tipPos) * 0.5f;
-			const Vector3 previousCenter = (previousMid + previousTip) * 0.5f;
-			const Vector3 span = tipPos - midPos;
-			const Vector3 segment = currentCenter - previousCenter;
-			const float segmentLength = segment.Length();
-			const float spanLength = span.Length();
-			if (segmentLength > 0.04f && spanLength > 0.10f)
-			{
-				const Vector3 segmentCenter = previousCenter + segment * 0.5f;
-				const float segmentYaw = std::atan2(segment.x, segment.z);
-				const float segmentPitch = -std::atan2(segment.y, std::sqrt(segment.x * segment.x + segment.z * segment.z));
-				m_effectTrailMesh->Draw(
-					Matrix::CreateScale(spanLength * 0.52f, 0.020f, segmentLength) *
-					Matrix::CreateRotationZ(0.18f) *
-					Matrix::CreateRotationX(segmentPitch) *
-					Matrix::CreateRotationY(segmentYaw) *
-					Matrix::CreateTranslation(segmentCenter),
-					m_view, m_proj,
-					Color(kTrailCoreColor.R(), kTrailCoreColor.G(), kTrailCoreColor.B(), 0.20f + sampleAlpha * 0.26f));
-				m_effectTrailMesh->Draw(
-					Matrix::CreateScale(spanLength * 0.68f, 0.010f, segmentLength * 0.92f) *
-					Matrix::CreateRotationZ(0.18f) *
-					Matrix::CreateRotationX(segmentPitch) *
-					Matrix::CreateRotationY(segmentYaw) *
-					Matrix::CreateTranslation(segmentCenter),
-					m_view, m_proj,
-					Color(kTrailRimColor.R(), kTrailRimColor.G(), kTrailRimColor.B(), 0.16f + sampleAlpha * 0.22f));
-			}
-			previousMid = midPos;
-			previousTip = tipPos;
-		}
+		m_slashHitEffects.RecordTrailSample(
+			m_player.swingTrailBase,
+			m_player.swingTrailTip,
+			std::clamp(m_player.comboIndex, 1, 3),
+			m_player.comboLevel);
+	}
+	else if (!attackInProgress)
+	{
+		// 攻撃フェーズが終了したら軌跡バッファをクリアする
+		m_slashHitEffects.ClearTrail();
 	}
 
 	if (m_player.comboLevel >= 3 && attackInProgress)

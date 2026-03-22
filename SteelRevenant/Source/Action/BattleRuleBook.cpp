@@ -16,9 +16,6 @@ namespace Action
 				L"90秒の制限時間で撃破を積み続けろ",
 				90.0f, // stageStartTimeSec
 				2.0f,  // resultDelaySec
-				1,     // requiredRelayCount
-				4.0f,  // relayTimeBonusSec
-				2.0f,  // beaconTimeBonusSec
 				6,     // killRampStep
 				20.0f, // timeRampStepSec
 				12,    // openingAliveCount
@@ -47,9 +44,6 @@ namespace Action
 				L"120秒の制限時間で高圧混成を処理し続けろ",
 				120.0f,
 				2.1f,
-				2,
-				11.0f,
-				7.0f,
 				5,
 				30.0f,
 				18,
@@ -78,9 +72,6 @@ namespace Action
 				L"150秒の制限時間で混成圧を切り崩し続けろ",
 				150.0f,
 				2.3f,
-				3,
-				18.0f,
-				12.0f,
 				4,
 				24.0f,
 				24,
@@ -136,9 +127,6 @@ namespace Action
 
 	float BattleRuleBook::GetStageStartTimeSec() const { return GetActiveRule().stageStartTimeSec; }
 	float BattleRuleBook::GetResultDelaySec() const { return GetActiveRule().resultDelaySec; }
-	int BattleRuleBook::GetRequiredRelayCount() const { return GetActiveRule().requiredRelayCount; }
-	float BattleRuleBook::GetRelayTimeBonusSec() const { return GetActiveRule().relayTimeBonusSec; }
-	float BattleRuleBook::GetBeaconTimeBonusSec() const { return GetActiveRule().beaconTimeBonusSec; }
 	int BattleRuleBook::GetKillRampStep() const { return GetActiveRule().killRampStep; }
 	float BattleRuleBook::GetTimeRampStepSec() const { return GetActiveRule().timeRampStepSec; }
 	int BattleRuleBook::GetOpeningAliveCount() const { return GetActiveRule().openingAliveCount; }

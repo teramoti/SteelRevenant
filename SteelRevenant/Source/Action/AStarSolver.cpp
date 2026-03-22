@@ -1,10 +1,7 @@
 ﻿//------------------------//------------------------
-// Contents(処理内容) PathGrid 上の4近傍A*探索を実装する。
+// Contents: 4-neighbor A* pathfinding implementation on PathGrid.
 //------------------------//------------------------
-// user(作成者) Keishi Teramoto
-// Created date(作成日) 2026 / 03 / 16
-// last updated (最終更新日) 2026 / 03 / 17
-//------------------------//------------------------
+
 #include "AStarSolver.h"
 
 #include <queue>
@@ -21,25 +18,24 @@ namespace
 
 	struct OpenNodeLess
 	{
-		// fScore が小さいノードを優先できるよう比較する。
+		// fScore smaller nodes have higher priority.
 		bool operator()(const OpenNode& a, const OpenNode& b) const
 		{
-			// priority_queue は最大ヒープなので逆順で比較
+			// priority_queue is max-heap; invert comparison
 			return a.fScore > b.fScore;
 		}
 	};
 
-	// 2ノード間の推定残コストを返す。
+	// Heuristic between two nodes (Manhattan for 4-neighborhood)
 	float Heuristic(const Action::PathGrid::GridCoord& a, const Action::PathGrid::GridCoord& b)
 	{
-		// 4近傍なのでマンハッタン距離を採用
 		return static_cast<float>(std::abs(a.x - b.x) + std::abs(a.y - b.y));
 	}
 }
 
 namespace Action
 {
-	// A*探索でstartからgoalまでの経路を求める。
+	// A* search from start to goal on PathGrid.
 	std::vector<PathGrid::GridCoord> AStarSolver::FindPath(
 		const PathGrid& grid,
 		const PathGrid::GridCoord& start,
@@ -136,5 +132,3 @@ namespace Action
 		return path;
 	}
 }
-
-

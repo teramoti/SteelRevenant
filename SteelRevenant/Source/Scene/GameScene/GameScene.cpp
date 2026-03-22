@@ -3,9 +3,7 @@
 #endif
 
 //------------------------
-// Contents(処理内容) ゲームメインシーンを実装する。全サブシステムを統合する。
-// 追加機能: ヒットストップ・スクリーンシェイク・ロックオンリング
-//           コンボポップアップ・ウェーブバナー・SlashHitEffect
+// ゲームメインシーンを実装する。全サブシステムを統合する。
 //------------------------
 #include "GameScene.h"
 #include <chrono>
@@ -34,19 +32,16 @@ namespace
 {
     constexpr float kGridCellSize = 1.0f;
     constexpr int   kGridHalfExt  = 30;
-    // adjust camera to slightly angled rear/above for better forward view
-constexpr float kCameraHeight = 5.0f;
-constexpr float kCameraBack   = 8.0f;
-// hitstop disabled
-constexpr float kHitstopSec = 0.0f;
-constexpr float kKillHitstopSec = 0.0f;
-constexpr float kHitFlashSec  = 0.15f;
-constexpr float kShakeOnHit   = 2.4f;
-constexpr float kShakeOnKill  = 4.8f;
-// aim field-of-view (radians)
-constexpr float kDefaultFov = DirectX::XM_PI/4.0f;
-constexpr float kAimFov = DirectX::XM_PI/5.5f; // narrower when aiming
+    // ヒットストップ無効
+    constexpr float kHitstopSec     = 0.0f;
+    constexpr float kKillHitstopSec = 0.0f;
+    constexpr float kHitFlashSec    = 0.15f;
+    constexpr float kShakeOnHit     = 2.4f;
+    constexpr float kShakeOnKill    = 4.8f;
+    // デフォルト画角 (ラジアン)
+    constexpr float kDefaultFov = DirectX::XM_PI / 4.0f;
 
+    // プレイログを CSV ファイルへ追記する
     void AppendPlayLog(const Action::GameState& gs, int stageIndex, float durationSec, int kills, int damage, int score)
     {
         try
@@ -60,7 +55,6 @@ constexpr float kAimFov = DirectX::XM_PI/5.5f; // narrower when aiming
             {
                 return;
             }
-            // header is not written here; consumer can inspect file
             ofs << stageIndex << ',' << durationSec << ',' << kills << ',' << damage << ',' << score << ',' << (gs.stageCleared ? 1 : 0) << ',' << (gs.timeExpired ? 1 : 0) << '\n';
         }
         catch (...) {}
@@ -119,11 +113,13 @@ void GameScene::Initialize()
     m_player      = Action::PlayerState();
     m_lockOnPulse = 0.0f;
 
-    // initialize camera to player facing
-    m_cameraYaw = m_player.yaw;
-    m_cameraPitch = 0.0f;
-    m_cameraFov = kDefaultFov;
-    m_cameraTargetFov = kDefaultFov;
+    // カメラコントローラーの初期化
+    {
+        const float width  = static_cast<float>(DirectX11::Get().GetWidth());
+        const float height = static_cast<float>(DirectX11::Get().GetHeight());
+        Camera::FollowCameraSettings camSettings;
+        m_cameraController.Initialize(camSettings, m_player.yaw, width, height);
+    }
 
     // SpriteBatch は DrawManager から借用
     m_spriteBatch = System::DrawManager::GetInstance().GetSprite();
@@ -151,7 +147,7 @@ void GameScene::Initialize()
     // HUD に SpriteBatch / Font を渡す
     m_hud.Initialize(device, DirectX11::Get().GetContext().Get(), m_spriteBatch, m_font);
 
-    // play stage-specific BGM if available
+    // ステージ別 BGM を再生する
     if (m_stageIndex == 1)
     {
         GameAudio::AudioSystem::GetInstance().PlayBgm(GameAudio::BgmId::DefenseCorridor);
@@ -166,6 +162,8 @@ void GameScene::Initialize()
     DirectX::Mouse::Get().SetMode(DirectX::Mouse::MODE_RELATIVE);
     DirectX::Mouse::Get().SetVisible(false);
     System::InputManager::GetInstance().ResetMouseDelta();
+
+    m_pauseController.Reset();
     (void)device;
 }
 
@@ -280,180 +278,44 @@ void GameScene::UpdateScore(float dt)
     (void)dt;
 }
 
-void GameScene::Update(const DX::StepTimer& timer)
+// --- UpdateBattle から分離したサブ責務 ---
+
+Action::InputSnapshot GameScene::BuildInputSnapshot(float dt) const
 {
-    const float dt = static_cast<float>(timer.GetElapsedSeconds());
-
-    m_sceneTime  += dt;
-    m_hud.Update(dt);
-
     const System::InputManager& input = System::InputManager::GetInstance();
-
-    // Pause toggle handling
-    if (input.IsKeyPressed(DirectX::Keyboard::Escape))
-    {
-        m_isPaused = !m_isPaused;
-        m_pauseSelected = 0;
-        if (m_isPaused)
-        {
-            // show cursor in pause
-            DirectX::Mouse::Get().SetMode(DirectX::Mouse::MODE_ABSOLUTE);
-            DirectX::Mouse::Get().SetVisible(true);
-            System::InputManager::GetInstance().ResetMouseDelta();
-        }
-        else
-        {
-            DirectX::Mouse::Get().SetMode(DirectX::Mouse::MODE_RELATIVE);
-            DirectX::Mouse::Get().SetVisible(false);
-            System::InputManager::GetInstance().ResetMouseDelta();
-        }
-    }
-
-    // If paused, process pause menu input and skip regular updates
-    if (m_isPaused)
-    {
-        const DirectX::Mouse::State* mouseState = input.GetMouseState();
-        if (mouseState != nullptr)
-        {
-            const float width = static_cast<float>(DirectX11::Get().GetWidth());
-            const float height = static_cast<float>(DirectX11::Get().GetHeight());
-            const float boxW = 420.0f;
-            const float boxH = 220.0f;
-            const float bx = width * 0.5f - boxW * 0.5f;
-            const float by = height * 0.5f - boxH * 0.5f;
-            const float mx = static_cast<float>(mouseState->x);
-            const float my = static_cast<float>(mouseState->y);
-            for (int index = 0; index < 4; ++index)
-            {
-                const float iy = by + 68.0f + static_cast<float>(index) * 36.0f;
-                if (mx >= bx + 16.0f && mx <= bx + boxW - 16.0f &&
-                    my >= iy - 6.0f && my <= iy + 28.0f)
-                {
-                    m_pauseSelected = index;
-                    break;
-                }
-            }
-        }
-
-        // navigate pause menu
-        if (input.IsKeyPressed(DirectX::Keyboard::Up) || input.IsKeyPressed(DirectX::Keyboard::W))
-        {
-            m_pauseSelected = (m_pauseSelected + 4 - 1) % 4;
-        }
-        if (input.IsKeyPressed(DirectX::Keyboard::Down) || input.IsKeyPressed(DirectX::Keyboard::S))
-        {
-            m_pauseSelected = (m_pauseSelected + 1) % 4;
-        }
-
-        if (input.IsKeyPressed(DirectX::Keyboard::Enter) || input.IsKeyPressed(DirectX::Keyboard::Space) || input.IsMouseButtonPressed(0))
-        {
-            // 0: resume, 1: title, 2: settings, 3: quit
-            if (m_pauseSelected == 0)
-            {
-                m_isPaused = false;
-                DirectX::Mouse::Get().SetMode(DirectX::Mouse::MODE_RELATIVE);
-                DirectX::Mouse::Get().SetVisible(false);
-                System::InputManager::GetInstance().ResetMouseDelta();
-            }
-            else if (m_pauseSelected == 1)
-            {
-                if (g_sceneManager) g_sceneManager->RequestTransition(TITLE_SCENE);
-                return;
-            }
-            else if (m_pauseSelected == 2)
-            {
-                if (g_sceneManager) g_sceneManager->RequestTransition(SETTINGS_SCENE);
-                return;
-            }
-            else if (m_pauseSelected == 3)
-            {
-                extern void ExitGame();
-                ExitGame();
-                return;
-            }
-        }
-
-        return;
-    }
-
-    m_lockOnPulse += dt;
-    m_slashHitEffects.Update(dt);
-    if (m_hitFlashTimer > 0.0f) m_hitFlashTimer -= dt;
-
-    if (m_hitstopTimer > 0.0f)
-    {
-        m_hitstopTimer = std::max(0.0f, m_hitstopTimer - dt);
-        UpdateCamera();
-        return;
-    }
-
-    m_flow.Update(dt, m_gameState.IsFinished());
-
-    if (m_flow.GetPhase() == BattlePhase::Battle)
-        UpdateBattle(dt);
-
-    UpdateCamera();
-    UpdateScore(dt);
-
-    if (m_flow.IsReadyToExit())
-    {
-        // append run summary for tuning
-        AppendPlayLog(m_gameState, m_stageIndex, m_gameState.survivalTimeSec, m_gameState.killCount, m_gameState.damageTaken, m_gameState.score);
-        // pass final game state and basic meta to ResultScene for display
-        ResultScene::s_lastResult = m_gameState;
-        ResultScene::s_stageIndex = m_stageIndex;
-        ResultScene::s_reachedWave = m_survivalDirector.GetCurrentWave();
-        if (g_sceneManager) g_sceneManager->RequestTransition(RESULT_SCENE);
-    }
-}
-
-void GameScene::UpdateBattle(float dt)
-{
-    m_gameState.Tick(dt);
-
-    const System::InputManager& input = System::InputManager::GetInstance();
-    const Vector2 mouseDelta = input.GetMouseDelta();
-
-    // update camera orientation from mouse input
-    m_cameraYaw += mouseDelta.x;
-    m_cameraPitch += mouseDelta.y;
-    // clamp pitch
-    if (m_cameraPitch < m_cameraPitchMin) m_cameraPitch = m_cameraPitchMin;
-    if (m_cameraPitch > m_cameraPitchMax) m_cameraPitch = m_cameraPitchMax;
-
-    // derive camera forward/right from camera yaw/pitch
-    const Matrix camRot = Matrix::CreateFromYawPitchRoll(m_cameraYaw, m_cameraPitch, 0.0f);
-    const Vector3 camFwd   = Vector3::Transform(Vector3(0,0,1), camRot);
-    const Vector3 camRight = Utility::MathEx::SafeNormalize(camFwd.Cross(Vector3::Up));
 
     Action::InputSnapshot snap;
     snap.dt           = dt;
-    snap.mouseDelta   = mouseDelta;
+    snap.mouseDelta   = input.GetMouseDelta();
     snap.moveForward  = input.IsKeyDown(DirectX::Keyboard::W);
     snap.moveBack     = input.IsKeyDown(DirectX::Keyboard::S);
     snap.moveLeft     = input.IsKeyDown(DirectX::Keyboard::A);
     snap.moveRight    = input.IsKeyDown(DirectX::Keyboard::D);
-    // slide: Shift 押下で発動 (LeftShift または RightShift)
     snap.slideHeld    = input.IsKeyDown(DirectX::Keyboard::LeftShift) || input.IsKeyDown(DirectX::Keyboard::RightShift);
     snap.attackPressed= input.IsMouseButtonPressed(0);
     snap.guardHeld    = input.IsMouseButtonDown(1);
     snap.lockTogglePressed = input.IsKeyPressed(DirectX::Keyboard::Tab);
+    return snap;
+}
 
-    if (snap.lockTogglePressed)
+void GameScene::ToggleLockOn(const Action::InputSnapshot& snap)
+{
+    if (!snap.lockTogglePressed)
     {
-        m_player.lockEnemyIndex = (m_player.lockEnemyIndex >= 0)
-            ? -1
-            : m_combat.FindNearestEnemy(m_enemies, m_player.position, 15.0f);
+        return;
     }
 
-    const int prevKill = m_gameState.killCount;
-    // pass camera-relative movement vectors to combat/player update
-    m_combat.UpdatePlayer(m_player, snap, camFwd, camRight, m_gameState);
-    m_combat.ResolvePlayerAttack(m_player, m_enemies, m_gameState);
+    m_player.lockEnemyIndex = (m_player.lockEnemyIndex >= 0)
+        ? -1
+        : m_combat.FindNearestEnemy(m_enemies, m_player.position, 15.0f);
+}
 
+void GameScene::ApplySwingHitFeedback(int prevKillCount)
+{
     bool swingHit = false;
     bool swingKilled = false;
     Vector3 swingHitPosition = Vector3::Zero;
+
     for (size_t i = 0; i < m_enemies.size(); ++i)
     {
         if (!m_enemies[i].hitByCurrentSwing)
@@ -485,17 +347,22 @@ void GameScene::UpdateBattle(float dt)
         }
     }
 
-    if (m_gameState.killCount > prevKill)
+    // キル時の短時間フラッシュ
+    if (m_gameState.killCount > prevKillCount)
     {
-        m_hitFlashTimer = kHitFlashSec; // brief flash on kill to strengthen feedback
+        m_hitFlashTimer = kHitFlashSec;
     }
 
+    // 被ダメージ時のフラッシュ
     if (m_player.damageGraceTimer > 0.0f && m_hitFlashTimer <= 0.0f)
     {
         m_hitFlashTimer = kHitFlashSec;
         m_hud.TriggerScreenShake(kShakeOnHit);
     }
+}
 
+void GameScene::SyncWaveProgress(float dt)
+{
     const int living = static_cast<int>(std::count_if(m_enemies.begin(), m_enemies.end(),
         [](const Action::EnemyState& e){ return e.state != Action::EnemyStateType::Dead; }));
 
@@ -509,16 +376,15 @@ void GameScene::UpdateBattle(float dt)
         m_hud.TriggerWaveBanner(m_announcedWave, m_survivalDirector.GetTotalWaveCount());
         GameAudio::AudioSystem::GetInstance().PlaySe(GameAudio::SeId::WaveClear, 0.8f);
     }
+}
 
-    m_combat.UpdateEnemies(m_enemies, m_player, snap, m_pathGrid, m_aStar, m_gameState);
-    HandleEnemyDefeatEvents();
-    CompactEnemyStateArrays();
-    ProcessSpawn();
-
+void GameScene::CollectDropItems(float dt)
+{
     std::vector<DirectX::SimpleMath::Vector3> pickedItems;
     std::vector<DirectX::SimpleMath::Vector3> pickedSpeedItems;
     m_arenaLayer.UpdateSpeedUpItems(m_player, m_combat, dt, pickedSpeedItems);
     m_dropSystem.UpdateDropItems(m_player, m_gameState, dt, pickedItems);
+
     for (const auto& pos : pickedItems)
     {
         m_slashHitEffects.Spawn(pos, m_player.yaw, DirectX::SimpleMath::Color(0.24f, 0.88f, 0.24f, 1.0f));
@@ -529,62 +395,129 @@ void GameScene::UpdateBattle(float dt)
         m_slashHitEffects.Spawn(pos, m_player.yaw, DirectX::SimpleMath::Color(0.18f, 1.0f, 0.72f, 1.0f));
         GameAudio::AudioSystem::GetInstance().PlaySe(GameAudio::SeId::ItemPickup, 1.0f);
     }
+}
 
-    // audio for enemy events is handled in CombatSystem to avoid duplication
+// --- メインループ ---
+
+void GameScene::Update(const DX::StepTimer& timer)
+{
+    const float dt = static_cast<float>(timer.GetElapsedSeconds());
+
+    m_sceneTime += dt;
+    m_hud.Update(dt);
+
+    // ポーズ切替判定
+    m_pauseController.UpdateToggle();
+
+    // ポーズ中はメニュー入力のみ処理する
+    if (m_pauseController.IsPaused())
+    {
+        const int transition = m_pauseController.UpdateMenuInput(
+            DirectX11::Get().GetWidth(), DirectX11::Get().GetHeight());
+        if (transition == -2)
+        {
+            extern void ExitGame();
+            ExitGame();
+            return;
+        }
+        if (transition >= 0)
+        {
+            if (g_sceneManager) g_sceneManager->RequestTransition(static_cast<SceneID>(transition));
+            return;
+        }
+        return;
+    }
+
+    m_lockOnPulse += dt;
+    m_slashHitEffects.Update(dt);
+    if (m_hitFlashTimer > 0.0f) m_hitFlashTimer -= dt;
+
+    // ヒットストップ中はカメラのみ更新する
+    if (m_hitstopTimer > 0.0f)
+    {
+        m_hitstopTimer = std::max(0.0f, m_hitstopTimer - dt);
+        UpdateCamera();
+        return;
+    }
+
+    m_flow.Update(dt, m_gameState.IsFinished());
+
+    if (m_flow.GetPhase() == BattlePhase::Battle)
+        UpdateBattle(dt);
+
+    UpdateCamera();
+    UpdateScore(dt);
+
+    // リザルト遷移判定
+    if (m_flow.IsReadyToExit())
+    {
+        AppendPlayLog(m_gameState, m_stageIndex, m_gameState.survivalTimeSec, m_gameState.killCount, m_gameState.damageTaken, m_gameState.score);
+        ResultScene::s_lastResult = m_gameState;
+        ResultScene::s_stageIndex = m_stageIndex;
+        ResultScene::s_reachedWave = m_survivalDirector.GetCurrentWave();
+        if (g_sceneManager) g_sceneManager->RequestTransition(RESULT_SCENE);
+    }
+}
+
+void GameScene::UpdateBattle(float dt)
+{
+    m_gameState.Tick(dt);
+
+    // 入力スナップショット構築
+    Action::InputSnapshot snap = BuildInputSnapshot(dt);
+    ToggleLockOn(snap);
+
+    const int prevKill = m_gameState.killCount;
+
+    // カメラ基底からプレイヤー移動方向を算出
+    const Vector3 camFwd   = m_cameraController.GetForward();
+    const Vector3 camRight = m_cameraController.GetRight();
+    m_combat.UpdatePlayer(m_player, snap, camFwd, camRight, m_gameState);
+    m_combat.ResolvePlayerAttack(m_player, m_enemies, m_gameState);
+
+    // 攻撃ヒット演出フィードバック
+    ApplySwingHitFeedback(prevKill);
+
+    // ウェーブ進行・危険度同期
+    SyncWaveProgress(dt);
+
+    // 敵 AI 更新
+    m_combat.UpdateEnemies(m_enemies, m_player, snap, m_pathGrid, m_aStar, m_gameState);
+    HandleEnemyDefeatEvents();
+    CompactEnemyStateArrays();
+    ProcessSpawn();
+
+    // アイテム回収
+    CollectDropItems(dt);
 }
 
 void GameScene::UpdateCamera()
 {
-    // camera placed behind player relative to camera facing direction (TPS over-the-shoulder)
-    float cameraHeight = kCameraHeight;
     const auto& stageRule = Action::BattleRuleBook::GetInstance().GetStageRule(m_stageIndex);
-    if (stageRule.cameraHeightOverride > 0.0f) {
-        cameraHeight = stageRule.cameraHeightOverride;
-    }
+    const DirectX11& dx   = DirectX11::Get();
+    const float aspect    = static_cast<float>(dx.GetWidth()) / static_cast<float>(std::max(1, dx.GetHeight()));
 
-    // forward vector from camera yaw/pitch
-    Matrix camRot = Matrix::CreateFromYawPitchRoll(m_cameraYaw, m_cameraPitch, 0.0f);
-    Vector3 forward = Vector3::Transform(Vector3(0,0,1), camRot);
-    Utility::MathEx::SafeNormalize(forward);
-    const Vector3 right = Vector3::Transform(Vector3(1,0,0), camRot);
+    m_cameraController.Update(
+        m_player.position,
+        m_player.yaw,
+        m_enemies,
+        m_player.lockEnemyIndex,
+        m_arena.GetWallRects(),
+        m_hud.GetShakeOffset(),
+        stageRule.cameraHeightOverride,
+        aspect);
 
-    // desired camera position: behind player along camera forward, elevated by cameraHeight and offset to shoulder
-    const Vector3 desiredCamPos = m_player.position - forward * kCameraBack + Vector3(0.0f, cameraHeight, 0.0f) + right * m_cameraShoulder;
-    // look target slightly ahead of player to show forward area (use camera forward but focus near player)
-    const Vector3 desiredTarget = m_player.position + forward * 6.0f + Vector3(0.0f, 0.8f, 0.0f);
-
-    const Vector2 shake = m_hud.GetShakeOffset();
-
-    // smooth camera position (lerp)
-    const float smoothFactor = m_cameraLag; // 0..1, higher is snappier
-    m_cameraPos = DirectX::SimpleMath::Vector3(
-        m_cameraPos.x + (desiredCamPos.x + shake.x * 0.05f - m_cameraPos.x) * smoothFactor,
-        m_cameraPos.y + (desiredCamPos.y + shake.y * 0.05f - m_cameraPos.y) * smoothFactor,
-        m_cameraPos.z + (desiredCamPos.z - m_cameraPos.z) * smoothFactor);
-
-    m_cameraTarget = m_player.position + Vector3(0.0f, 0.8f, 0.0f);
-    // use smoothed look target as well to avoid jitter
-    m_cameraTarget.x += (desiredTarget.x - m_cameraTarget.x) * smoothFactor;
-    m_cameraTarget.y += (desiredTarget.y - m_cameraTarget.y) * smoothFactor;
-    m_cameraTarget.z += (desiredTarget.z - m_cameraTarget.z) * smoothFactor;
-
-    m_view = Matrix::CreateLookAt(m_cameraPos, m_cameraTarget, Vector3::Up);
-
-    const DirectX11& dx = DirectX11::Get();
-    const float aspect  = static_cast<float>(dx.GetWidth()) / static_cast<float>(std::max(1, dx.GetHeight()));
-
-    // FOV smoothing (aiming reduces FOV)
-    m_cameraFov += (m_cameraTargetFov - m_cameraFov) * 0.08f;
-    m_proj       = Matrix::CreatePerspectiveFieldOfView(m_cameraFov, aspect, 0.1f, 1000.0f);
+    m_view       = m_cameraController.GetView();
+    m_proj       = m_cameraController.GetProj();
     m_projection = m_proj;
 }
 
 void GameScene::Render()
 {
-    // Visual/ サブファイルへ委譲
+    // ワールド描画（サブファイルへ委譲）
     DrawWorld();
 
-    // HUD（SpriteBatch 2D描画）
+    // HUD（SpriteBatch 2D 描画）
     if (m_spriteBatch && m_font)
     {
         System::DrawManager::GetInstance().Begin();
@@ -593,7 +526,7 @@ void GameScene::Render()
             m_arenaLayer.IsSpeedActive(), m_arenaLayer.GetSpeedRemaining(),
             DirectX11::Get().GetWidth(), DirectX11::Get().GetHeight());
 
-        // カウントダウン
+        // カウントダウン表示
         if (m_flow.GetPhase() == BattlePhase::Countdown && m_font)
         {
             const int cnt = static_cast<int>(m_flow.GetCountdownTimer()) + 1;
@@ -605,10 +538,10 @@ void GameScene::Render()
                 DirectX::XMFLOAT2(0,0), 2.5f);
         }
 
-        // pause modal
-        if (m_isPaused)
+        // ポーズメニュー描画
+        if (m_pauseController.IsPaused())
         {
-            m_hud.RenderPauseMenu(m_pauseSelected, DirectX11::Get().GetWidth(), DirectX11::Get().GetHeight());
+            m_hud.RenderPauseMenu(m_pauseController.GetSelectedIndex(), DirectX11::Get().GetWidth(), DirectX11::Get().GetHeight());
         }
 
         System::DrawManager::GetInstance().End();

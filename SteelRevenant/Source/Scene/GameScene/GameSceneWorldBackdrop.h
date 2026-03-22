@@ -1,4 +1,10 @@
-﻿#pragma once
+﻿// Contents(処理内容) ゲームシーンの背景（ワールドバックドロップ）を管理・描画する。
+//------------------------//------------------------
+// user(作成者) Keishi Teramoto
+// Created date(作成日) 2026 / 03 / 16
+// last updated (最終更新日) 2026 / 03 / 17
+//------------------------//------------------------
+#pragma once
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -34,6 +40,13 @@ private:
 };
 
 // --- 以下に簡易実装をインラインで配置 ---
+
+// Contents(処理内容) 各レイヤーのプリミティブを生成して初期化する。
+//------------------------//------------------------
+// user(作成者) Keishi Teramoto
+// Created date(作成日) 2026 / 03 / 16
+// last updated (最終更新日) 2026 / 03 / 17
+//------------------------//------------------------
 inline void GameSceneWorldBackdrop::Initialize(ID3D11Device* device, ID3D11DeviceContext* context)
 {
     // 各レイヤーの色・スケール・オフセットを設定し、球プリミティブを作成する
@@ -47,11 +60,18 @@ inline void GameSceneWorldBackdrop::Initialize(ID3D11Device* device, ID3D11Devic
         m_layers[i].color   = colors[i];
         m_layers[i].scale   = scales[i];
         m_layers[i].yOffset = offsets[i];
+        // 元の実装に合わせ、context を渡して GeometricPrimitive を作成する
         m_layers[i].sphere  = DirectX::GeometricPrimitive::CreateSphere(context, 2.0f, 8, false);
     }
     (void)device;
 }
 
+// Contents(処理内容) 各レイヤーをカメラ位置に合わせて描画する。
+//------------------------//------------------------
+// user(作成者) Keishi Teramoto
+// Created date(作成日) 2026 / 03 / 16
+// last updated (最終更新日) 2026 / 03 / 17
+//------------------------//------------------------
 inline void GameSceneWorldBackdrop::Render(ID3D11DeviceContext* context,
     const DirectX::SimpleMath::Matrix& view, const DirectX::SimpleMath::Matrix& projection,
     const DirectX::SimpleMath::Vector3& cameraPos)

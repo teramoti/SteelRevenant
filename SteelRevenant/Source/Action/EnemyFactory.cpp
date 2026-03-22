@@ -1,10 +1,7 @@
 ﻿//------------------------//------------------------
-// Contents(処理内容) 危険度ごとの敵生成処理を実装する。
+// Contents: Enemy creation logic that assigns archetypes and parameters based on danger level and spawn serial.
 //------------------------//------------------------
-// user(作成者) Keishi Teramoto
-// Created date(作成日) 2026 / 03 / 16
-// last updated (最終更新日) 2026 / 03 / 18
-//------------------------//------------------------
+
 #include "EnemyFactory.h"
 
 #include <algorithm>
@@ -21,7 +18,7 @@
 
 namespace Action
 {
-	// 危険度と通し番号から敵 1 体を生成する。
+	// Create a single enemy instance based on danger level and serial.
 	EnemyState EnemyFactory::CreateEnemy(
 		const DirectX::SimpleMath::Vector3& spawnBase,
 		int dangerLevel,
@@ -35,7 +32,7 @@ namespace Action
 		enemy.position = spawnBase + DirectX::SimpleMath::Vector3(jitterX, 0.0f, jitterZ);
 		enemy.spawnPosition = enemy.position;
 
-		// hp は後段で enemy.hp = enemy.maxHp により確定するため、ここでは maxHp のみ設定する。
+		// hp is finalized later by enemy.hp = enemy.maxHp; set maxHp here.
 		enemy.maxHp = 40.0f + static_cast<float>(clampedDanger - 1) * 7.0f;
 		enemy.state = EnemyStateType::Idle;
 		enemy.stateTimer = 0.3f + 0.04f * static_cast<float>(spawnSerial % 6);
@@ -85,7 +82,7 @@ namespace Action
 			enemy.isRanged = false;
 		}
 
-		// ステージ定義に応じてレーザー／突進敵を割り当てる（最小変更）
+		// Assign special roles based on stage rule counts
 		const BattleRuleBook& ruleBook = BattleRuleBook::GetInstance();
 		const StageRuleDefinition& stageRule = ruleBook.GetActiveRule();
 		const int denom = std::max(1, stageRule.baseAliveCount);

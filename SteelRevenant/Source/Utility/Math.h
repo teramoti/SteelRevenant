@@ -3,7 +3,7 @@
 #define NOMINMAX
 #endif
 
-namespace Teramoto
+namespace SteelRevenant
 {
     class Math
     {
@@ -45,4 +45,5 @@ namespace Teramoto
         static float ToDeg(float rad);
     };
 }
+
 

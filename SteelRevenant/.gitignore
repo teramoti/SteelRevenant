@@ -28,3 +28,12 @@ Save/
 *.opensdf
 *.db-shm
 *.db-wal
+
+# 一時ディレクトリ
+AppData/Local/Temp/
+
+# ビルドログ
+logs/
+
+# フォントや一時的アセットのキャッシュ
+*.spritefont

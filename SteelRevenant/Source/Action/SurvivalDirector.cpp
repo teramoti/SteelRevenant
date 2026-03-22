@@ -95,8 +95,8 @@ namespace Action
 			ruleBook.GetMinSpawnIntervalSec(),
 			ruleBook.GetBaseSpawnIntervalSec() - wavePressure * 0.02f - dangerPressure * 0.006f);
 
-		// Aggressively reduce spawn interval for higher density (but respect ruleBook min)
-		m_spawnIntervalSec = std::max(ruleBook.GetMinSpawnIntervalSec(), m_spawnIntervalSec * 0.7f);
+		// Respect ruleBook minimum; avoid additional aggressive scaling here to reduce spawn burstiness
+		m_spawnIntervalSec = std::max(ruleBook.GetMinSpawnIntervalSec(), m_spawnIntervalSec);
 
 		const int desiredAlive = (std::min)(m_targetAliveCount, m_maxAliveCount);
 		if (livingEnemyCount < desiredAlive)
@@ -300,10 +300,10 @@ namespace Action
 			baseAlive,
 			maxAlive);
 
-		// Prefer higher combat density when possible: ensure target is within 10..30 range if supported by maxAlive
-		if (maxAlive >= 10)
+		// Prefer moderate combat density: clamp target into a sensible range when supported by maxAlive
+		if (maxAlive >= 8)
 		{
-			target = Utility::MathEx::Clamp(target, 10, std::min(30, maxAlive));
+			target = Utility::MathEx::Clamp(target, 6, std::min(20, maxAlive));
 		}
 
 		return target;
@@ -320,8 +320,8 @@ namespace Action
 			ruleBook.GetBaseSpawnBatch() + (m_currentWave - 1),
 			ruleBook.GetBaseSpawnBatch(),
 			ruleBook.GetMaxSpawnBatch());
-		// Increase spawn batch to raise density (but stay within ruleBook limits)
-		m_spawnBatch = std::min(m_spawnBatch * 2, ruleBook.GetMaxSpawnBatch());
+		// Keep spawn batch conservative to avoid overwhelming the player
+		m_spawnBatch = std::min(m_spawnBatch, ruleBook.GetMaxSpawnBatch());
 		m_spawnCooldownSec = 0.0f;
 		m_waveBreak = false;
 		m_completed = false;

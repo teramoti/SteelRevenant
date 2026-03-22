@@ -229,6 +229,10 @@
     <ClInclude Include="Source\Scene\GameScene\GameSceneArenaLayer.h" />
     <ClInclude Include="Source\Scene\GameScene\GameSceneFlow.h" />
     <ClInclude Include="Source\Scene\GameScene\GameSceneHud.h" />
+    <ClInclude Include="Source\Scene\GameScene\GameSceneCameraController.h" />
+    <ClInclude Include="Source\Scene\GameScene\FollowCameraController.h" />
+    <ClInclude Include="Source\Scene\GameScene\FollowCameraSettings.h" />
+    <ClInclude Include="Source\Scene\GameScene\GameScenePauseController.h" />
     <ClInclude Include="Source\Scene\GameScene\GameSceneUpdate.h" />
     <ClInclude Include="Source\Scene\GameScene\GameSceneVisualPalette.h" />
     <ClInclude Include="Source\Scene\GameScene\GameSceneWorldActors.h" />
@@ -261,6 +265,15 @@
       <Filter>Scene\GameScene</Filter>
     </ClCompile>
     <ClCompile Include="Source\Scene\GameScene\GameSceneHud.cpp">
+      <Filter>Scene\GameScene</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Scene\GameScene\GameSceneCameraController.cpp">
+      <Filter>Scene\GameScene</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Scene\GameScene\FollowCameraController.cpp">
+      <Filter>Scene\GameScene</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Scene\GameScene\GameScenePauseController.cpp">
       <Filter>Scene\GameScene</Filter>
     </ClCompile>
     <ClCompile Include="Source\Scene\GameScene\GameSceneStage.cpp">
@@ -341,9 +354,6 @@
     <ClCompile Include="Source\Scene\SettingsScene\SettingsScene.cpp">
       <Filter>Scene\Settings</Filter>
     </ClCompile>
-    <ClCompile Include="Source\Scene\GameScene\Visual\GameSceneWorldBackdrop.cpp">
-      <Filter>Scene\GameScene\Visual</Filter>
-    </ClCompile>
     <ClCompile Include="Source\Scene\GameScene\Visual\GameSceneWorldArena.cpp">
       <Filter>Scene\GameScene\Visual</Filter>
     </ClCompile>
@@ -376,5 +386,6 @@
     <None Include="BUILD_NOTES.md" />
     <None Include="build.bat" />
     <None Include="package.ps1" />
+    <None Include="README_JP.md" />
   </ItemGroup>
 </Project>

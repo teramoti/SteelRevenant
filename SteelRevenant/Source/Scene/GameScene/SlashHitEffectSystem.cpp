@@ -1,4 +1,4 @@
-ï»¿#ifndef NOMINMAX
+#ifndef NOMINMAX
 #define NOMINMAX
 #endif
 
@@ -21,6 +21,7 @@ namespace SceneFx
             burst = {};
             burst.active = false;
         }
+        ClearTrail();
     }
 
     void SlashHitEffectSystem::Spawn(const Vector3& position, float baseYaw, const Color& tint, bool killBurst)
@@ -50,7 +51,10 @@ namespace SceneFx
 
         SlashBurst& burst = m_bursts[slotIndex];
         burst = {};
-        burst.position = position + Vector3(0.0f, killBurst ? 1.20f : 1.00f, 0.0f);
+        // “G‚Ì‘«Œ³À•W‚©‚çn‚ªÀÛ‚É“–‚½‚é‚‚³i• ?‹¹j‚ÖƒIƒtƒZƒbƒg‚·‚é
+        // ’Êíƒqƒbƒg: Y+0.88i‘åŒ•‚Ìnæ‚ª“·‘Ì’†‰›‚É“Í‚­‚‚³j
+        // ƒLƒ‹ƒqƒbƒg: Y+1.05i“ª•”Šñ‚è‚É‰‰o‚ğã‚°‚éj
+        burst.position = position + Vector3(0.0f, killBurst ? 1.05f : 0.88f, 0.0f);
         burst.ageSec = 0.0f;
         burst.lifetimeSec = killBurst ? 0.18f : 0.10f;
         burst.yaw = baseYaw;
@@ -65,19 +69,71 @@ namespace SceneFx
         Spawn(position, baseYaw, tint, true);
     }
 
+    void SlashHitEffectSystem::RecordTrailSample(
+        const Vector3& base,
+        const Vector3& tip,
+        int comboIndex,
+        int comboLevel)
+    {
+        // Å‚àŒÃ‚¢”ñƒAƒNƒeƒBƒuƒXƒƒbƒg‚ğ’T‚·B‚È‚¯‚ê‚ÎÅŒÃ‚ÌƒXƒƒbƒg‚ğã‘‚«‚·‚é
+        size_t slot = kMaxTrailSamples;
+        float oldestAge = -1.0f;
+        size_t oldestSlot = 0;
+        for (size_t i = 0; i < m_trailSamples.size(); ++i)
+        {
+            if (!m_trailSamples[i].active)
+            {
+                slot = i;
+                break;
+            }
+            if (m_trailSamples[i].ageSec > oldestAge)
+            {
+                oldestAge = m_trailSamples[i].ageSec;
+                oldestSlot = i;
+            }
+        }
+        if (slot == kMaxTrailSamples)
+        {
+            slot = oldestSlot;
+        }
+
+        TrailSample& s = m_trailSamples[slot];
+        s.base       = base;
+        s.tip        = tip;
+        s.ageSec     = 0.0f;
+        s.comboIndex = comboIndex;
+        s.comboLevel = comboLevel;
+        s.active     = true;
+    }
+
+    void SlashHitEffectSystem::ClearTrail()
+    {
+        for (TrailSample& s : m_trailSamples)
+        {
+            s = {};
+            s.active = false;
+        }
+    }
+
     void SlashHitEffectSystem::Update(float dt)
     {
         for (SlashBurst& burst : m_bursts)
         {
-            if (!burst.active)
-            {
-                continue;
-            }
-
+            if (!burst.active) continue;
             burst.ageSec += dt;
             if (burst.ageSec >= burst.lifetimeSec)
             {
                 burst.active = false;
+            }
+        }
+        // ‹OÕƒTƒ“ƒvƒ‹‚Ìõ–½‚ği‚ßAŠúŒÀØ‚ê‚ğ”ñƒAƒNƒeƒBƒu‚É‚·‚é
+        for (TrailSample& s : m_trailSamples)
+        {
+            if (!s.active) continue;
+            s.ageSec += dt;
+            if (s.ageSec >= kTrailSampleLifetime)
+            {
+                s.active = false;
             }
         }
     }
@@ -88,71 +144,167 @@ namespace SceneFx
         const Matrix& view,
         const Matrix& proj) const
     {
+        // aŒ‚‹OÕF—×Ú‚·‚éƒTƒ“ƒvƒ‹“_ŠÔ‚ğƒZƒOƒƒ“ƒg‚Æ‚µ‚Ä•`‰æ‚·‚é
+        // ageSec ‚ª¬‚³‚¢‚Ù‚ÇV‚µ‚¢ƒTƒ“ƒvƒ‹‚È‚Ì‚ÅAcurr ‚æ‚è ageSec ‚ª¬‚³‚¢Ÿ‚ÌƒTƒ“ƒvƒ‹‚ğ’T‚·
+        // ŠÔŒo‰ß‚Å“§–¾“x‚ª‰º‚ª‚è©‘R‚ÉÁ‚¦‚é
+        for (size_t i = 0; i < m_trailSamples.size(); ++i)
+        {
+            const TrailSample& curr = m_trailSamples[i];
+            if (!curr.active) continue;
+
+            // Œ»İ‚ÌƒTƒ“ƒvƒ‹‚æ‚èV‚µ‚¢iageSec ‚ª¬‚³‚¢j—LŒøƒTƒ“ƒvƒ‹‚ğ—×Ú“_‚Æ‚µ‚Ä’T‚·
+            const TrailSample* next = nullptr;
+            for (size_t j = 0; j < m_trailSamples.size(); ++j)
+            {
+                if (j == i) continue;
+                if (!m_trailSamples[j].active) continue;
+                if (m_trailSamples[j].ageSec >= curr.ageSec) continue;
+                if (next == nullptr || m_trailSamples[j].ageSec > next->ageSec)
+                {
+                    next = &m_trailSamples[j];
+                }
+            }
+            if (!next) continue;
+
+            const float lifeT = std::clamp(curr.ageSec / kTrailSampleLifetime, 0.0f, 1.0f);
+            const float fade  = 1.0f - lifeT;
+
+            // ƒRƒ“ƒ{’iŠK‚É‰‚¶‚½•EF‚Ì‹­“x‚ğŒˆ‚ß‚é
+            // comboIndex 1: •W€A2: ‚â‚âL‚ßA3: ‹­‚ßiƒRƒ“ƒ{ƒŒƒxƒ‹‚àl—¶j
+            const float comboScale = (curr.comboIndex == 3) ? 1.30f
+                                   : (curr.comboIndex == 2) ? 1.14f
+                                   : 1.0f;
+            const float levelScale = 1.0f + static_cast<float>(curr.comboLevel) * 0.08f;
+            const float widthBase  = 0.055f * comboScale * levelScale; // Œ•‚Ìd‚³‚ğŠ´‚¶‚é•
+            const float trailWidth = widthBase * (0.70f + fade * 0.30f);
+            const float alphaCore  = (curr.comboIndex == 3) ? (0.28f + fade * 0.38f)
+                                   : (curr.comboIndex == 2) ? (0.22f + fade * 0.32f)
+                                   : (0.16f + fade * 0.28f);
+            const float alphaRim   = alphaCore * 0.55f;
+
+            // ƒRƒAƒJƒ‰[iƒRƒ“ƒ{’iŠK‚²‚Æ‚ÉF‘Š‚ğ•Ï‚¦‚éj
+            // 1’i: ƒVƒ‹ƒo[A2’i: ƒVƒAƒ“Šñ‚èA3’i: ‡
+            const Color coreColor = (curr.comboIndex == 3)
+                ? Color(0.72f, 0.44f, 0.98f, alphaCore)
+                : (curr.comboIndex == 2)
+                    ? Color(0.38f, 0.88f, 0.96f, alphaCore)
+                    : Color(0.80f, 0.84f, 0.92f, alphaCore);
+            const Color rimColor(
+                coreColor.R() * 0.85f + 0.12f,
+                coreColor.G() * 0.85f + 0.12f,
+                coreColor.B() * 0.85f + 0.12f,
+                alphaRim);
+
+            // ‹OÕƒZƒOƒƒ“ƒg‚ÌŒü‚«‚Æ’·‚³‚ğŒvZ‚·‚é
+            const Vector3 currMid = (curr.base + curr.tip) * 0.5f;
+            const Vector3 nextMid = (next->base + next->tip) * 0.5f;
+            const Vector3 segment = currMid - nextMid;
+            const float   segLen  = segment.Length();
+            const Vector3 span    = curr.tip - curr.base;
+            const float   spanLen = span.Length();
+
+            if (segLen < 0.02f || spanLen < 0.06f) continue;
+
+            const float   segYaw   = std::atan2(segment.x, segment.z);
+            const float   segPitch = -std::atan2(segment.y,
+                std::sqrt(segment.x * segment.x + segment.z * segment.z));
+            const Vector3 segCenter = nextMid + segment * 0.5f;
+
+            // ƒRƒA‹OÕi‘¾‚ßE•s“§–¾Šñ‚èj
+            streakMesh.Draw(
+                Matrix::CreateScale(spanLen * trailWidth * 5.0f, trailWidth, segLen) *
+                Matrix::CreateRotationZ(0.12f) *
+                Matrix::CreateRotationX(segPitch) *
+                Matrix::CreateRotationY(segYaw) *
+                Matrix::CreateTranslation(segCenter),
+                view, proj, coreColor);
+
+            // ƒŠƒ€‹OÕi×‚ßE”¼“§–¾j
+            streakMesh.Draw(
+                Matrix::CreateScale(spanLen * trailWidth * 7.0f, trailWidth * 0.42f, segLen * 0.90f) *
+                Matrix::CreateRotationZ(0.12f) *
+                Matrix::CreateRotationX(segPitch) *
+                Matrix::CreateRotationY(segYaw) *
+                Matrix::CreateTranslation(segCenter),
+                view, proj, rimColor);
+        }
+
+        // ƒqƒbƒgƒo[ƒXƒgiÕŒ‚“_ƒGƒtƒFƒNƒgj
         for (const SlashBurst& burst : m_bursts)
         {
-            if (!burst.active)
-            {
-                continue;
-            }
+            if (!burst.active) continue;
+
             const float safeLifetime = std::max(0.001f, burst.lifetimeSec);
             const float lifeT = std::clamp(burst.ageSec / safeLifetime, 0.0f, 1.0f);
-            const float fade = 1.0f - lifeT;
+            const float fade  = 1.0f - lifeT;
 
             const Vector3 forward(std::sin(burst.yaw), 0.0f, std::cos(burst.yaw));
             const Vector3 right(forward.z, 0.0f, -forward.x);
-            const Vector3 origin = burst.position + forward * 0.08f + Vector3(0.0f, 0.04f, 0.0f);
+            const Vector3 origin = burst.position + forward * 0.06f;
 
-            const float slashLen = burst.killBurst
-                ? (1.48f - lifeT * 0.18f)
-                : (1.12f - lifeT * 0.10f);
+            // \šƒXƒgƒŠ[ƒN…•½•ûŒüFn‚ª’Ê‚Á‚½•ûŒü‚É’Z‚¢‘MŒõ‚ğ•`‚­
+            // fade ‚Å‹}‘¬‚Ék¬‚µuƒqƒbƒguŠÔ‚¾‚¯Œõ‚év‹““®‚É‚·‚é
+            const float streakLen  = (burst.killBurst ? 0.46f : 0.32f) * fade;
+            const float streakW    = (burst.killBurst ? 0.044f : 0.032f) * (0.60f + fade * 0.40f);
+            const Color streakColor(
+                std::clamp(burst.tint.R() * 1.10f, 0.0f, 1.0f),
+                std::clamp(burst.tint.G() * 1.10f, 0.0f, 1.0f),
+                std::clamp(burst.tint.B() * 1.10f, 0.0f, 1.0f),
+                burst.killBurst ? (0.55f * fade) : (0.42f * fade));
 
-            const float slashWidth = burst.killBurst
-                ? (0.18f + fade * 0.05f)
-                : (0.13f + fade * 0.03f);
-
-            const Color slashColor(
-                std::clamp(burst.tint.R() * 1.05f, 0.0f, 1.0f),
-                std::clamp(burst.tint.G() * 1.05f, 0.0f, 1.0f),
-                std::clamp(burst.tint.B() * 1.05f, 0.0f, 1.0f),
-                burst.killBurst ? (0.30f + fade * 0.40f) : (0.24f + fade * 0.32f));
-
-            const Color flashColor(
-                std::clamp(burst.tint.R() * 1.18f + 0.12f, 0.0f, 1.0f),
-                std::clamp(burst.tint.G() * 1.18f + 0.12f, 0.0f, 1.0f),
-                std::clamp(burst.tint.B() * 1.18f + 0.12f, 0.0f, 1.0f),
-                burst.killBurst ? (0.22f + fade * 0.34f) : (0.18f + fade * 0.24f));
-
-            const Matrix slashWorld =
-                Matrix::CreateScale(slashWidth, 0.026f, slashLen) *
-                Matrix::CreateRotationZ(0.58f) *
-                Matrix::CreateRotationX(-0.16f) *
+            // …•½ƒXƒgƒŠ[ƒNiƒvƒŒƒCƒ„[‚ÌŒü‚«‚É‰ˆ‚Á‚½•ûŒüj
+            streakMesh.Draw(
+                Matrix::CreateScale(streakW, streakW * 0.28f, streakLen) *
                 Matrix::CreateRotationY(burst.yaw) *
-                Matrix::CreateTranslation(origin);
-            streakMesh.Draw(slashWorld, view, proj, slashColor);
+                Matrix::CreateTranslation(origin),
+                view, proj, streakColor);
 
-            const float flashScale = burst.killBurst
-                ? (0.28f + fade * 0.12f)
-                : (0.20f + fade * 0.08f);
-            const Matrix flashWorld =
-                Matrix::CreateScale(flashScale, flashScale * 0.52f, flashScale) *
-                Matrix::CreateTranslation(origin + right * 0.04f);
-            particleMesh.Draw(flashWorld, view, proj, flashColor);
+            // Î‚ßƒXƒgƒŠ[ƒNin‚ÌŠp“x‚É‹ß‚¢Î‚ß60“xj
+            streakMesh.Draw(
+                Matrix::CreateScale(streakW * 0.70f, streakW * 0.28f, streakLen * 0.70f) *
+                Matrix::CreateRotationZ(burst.killBurst ? 0.62f : 0.52f) *
+                Matrix::CreateRotationY(burst.yaw + 0.78f) *
+                Matrix::CreateTranslation(origin),
+                view, proj, streakColor);
+
+            // ÕŒ‚ƒtƒ‰ƒbƒVƒ…‹…FƒqƒbƒguŠÔ‚ÉÅ‘åAfade ‚Åûk‚·‚é
+            const float flashScale = (burst.killBurst ? 0.22f : 0.15f) * fade;
+            const Color flashColor(
+                std::clamp(burst.tint.R() * 1.22f + 0.14f, 0.0f, 1.0f),
+                std::clamp(burst.tint.G() * 1.22f + 0.14f, 0.0f, 1.0f),
+                std::clamp(burst.tint.B() * 1.22f + 0.14f, 0.0f, 1.0f),
+                burst.killBurst ? (0.72f * fade) : (0.56f * fade));
+            particleMesh.Draw(
+                Matrix::CreateScale(flashScale, flashScale * 0.62f, flashScale) *
+                Matrix::CreateTranslation(origin),
+                view, proj, flashColor);
+
+            // ÕŒ‚ƒŠƒ“ƒOF“oê’¼Œã‚Í¬‚³‚­AlifeT ‚É]‚¢ŠO‘¤‚ÖL‚ª‚Á‚ÄÁ‚¦‚é
+            // fade ‚Ì“ñæ‚Å“§–¾“x‚ğ‘f‘‚­—‚Æ‚µc—¯Š´‚ğ—}‚¦‚é
+            const float ringScale = (burst.killBurst ? 0.10f : 0.08f) + lifeT * (burst.killBurst ? 0.52f : 0.36f);
+            const Color ringColor(
+                std::clamp(burst.tint.R() * 1.04f, 0.0f, 1.0f),
+                std::clamp(burst.tint.G() * 1.04f, 0.0f, 1.0f),
+                std::clamp(burst.tint.B() * 1.04f, 0.0f, 1.0f),
+                (burst.killBurst ? 0.46f : 0.32f) * fade * fade);
+            particleMesh.Draw(
+                Matrix::CreateScale(ringScale, 0.022f, ringScale) *
+                Matrix::CreateTranslation(origin),
+                view, proj, ringColor);
 
             if (burst.killBurst)
             {
-                const float ringScale = 0.36f + lifeT * 0.70f;
-                const Matrix ringWorld =
-                    Matrix::CreateScale(ringScale, 0.026f, ringScale) *
-                    Matrix::CreateTranslation(origin + Vector3(0.0f, 0.03f, 0.0f));
+                // ƒLƒ‹‚Ì‚İŠOüƒŠƒ“ƒO‚ğ’Ç‰Á‚µ‚Ä‰‰o‚ğ‹­‚ß‚é
+                const float outerRing = 0.18f + lifeT * 0.84f;
                 particleMesh.Draw(
-                    ringWorld,
-                    view,
-                    proj,
+                    Matrix::CreateScale(outerRing, 0.018f, outerRing) *
+                    Matrix::CreateTranslation(origin + Vector3(0.0f, 0.06f, 0.0f)),
+                    view, proj,
                     Color(
                         std::clamp(burst.tint.R() * 1.08f, 0.0f, 1.0f),
                         std::clamp(burst.tint.G() * 1.08f, 0.0f, 1.0f),
                         std::clamp(burst.tint.B() * 1.08f, 0.0f, 1.0f),
-                        0.10f + fade * 0.18f));
+                        0.28f * fade * fade));
             }
         }
     }

@@ -97,6 +97,9 @@
     <!-- ルート -->
     <ClCompile Include="Game.cpp" />
     <ClCompile Include="Main.cpp" />
+    <ClCompile Include="Source\Scene\GameScene\FollowCameraController.cpp" />
+    <ClCompile Include="Source\Scene\GameScene\GameScenePauseController.cpp" />
+    <ClCompile Include="Source\Scene\GameScene\SlashHitEffectSystem.cpp" />
     <ClCompile Include="Window.cpp" />
     <!-- Action -->
     <ClCompile Include="Source\Action\AStarSolver.cpp" />
@@ -123,6 +126,7 @@
     <ClCompile Include="Source\Scene\GameScene\EnemyVisualProfile.cpp" />
     <ClCompile Include="Source\Scene\GameScene\GameScene.cpp" />
     <ClCompile Include="Source\Scene\GameScene\GameSceneArenaLayer.cpp" />
+    <ClCompile Include="Source\Scene\GameScene\GameSceneCameraController.cpp" />
     <ClCompile Include="Source\Scene\GameScene\GameSceneFlow.cpp" />
     <ClCompile Include="Source\Scene\GameScene\GameSceneHud.cpp" />
     <ClCompile Include="Source\Scene\GameScene\GameSceneStage.cpp" />
@@ -132,7 +136,6 @@
     </ClCompile>
     <ClCompile Include="Source\Scene\GameScene\GameSceneWorldRender.cpp" />
     <ClCompile Include="Source\Scene\GameScene\PlayerVisualProfile.cpp" />
-    <ClCompile Include="Source\Scene\GameScene\SlashHitEffectSystem.cpp" />
     <ClCompile Include="Source\Scene\GameScene\StageFloorStyle.cpp" />
     <!-- Visual/ サブフォルダ（旧直下の重複版は削除済み） -->
     <ClCompile Include="Source\Scene\GameScene\Visual\GameSceneWorldActors.cpp" />
@@ -158,6 +161,8 @@
     <ClInclude Include="CheckMemory.h" />
     <ClInclude Include="Game.h" />
     <ClInclude Include="Source\GameSystem\UIConfig.h" />
+    <ClInclude Include="Source\Scene\GameScene\FollowCameraController.h" />
+    <ClInclude Include="Source\Scene\GameScene\FollowCameraSettings.h" />
     <ClInclude Include="StepTimer.h" />
     <ClInclude Include="Window.h" />
     <!-- Action -->
@@ -204,8 +209,10 @@
     <ClInclude Include="Source\Scene\GameScene\EnemyVisualProfile.h" />
     <ClInclude Include="Source\Scene\GameScene\GameScene.h" />
     <ClInclude Include="Source\Scene\GameScene\GameSceneArenaLayer.h" />
+    <ClInclude Include="Source\Scene\GameScene\GameSceneCameraController.h" />
     <ClInclude Include="Source\Scene\GameScene\GameSceneFlow.h" />
     <ClInclude Include="Source\Scene\GameScene\GameSceneHud.h" />
+    <ClInclude Include="Source\Scene\GameScene\GameScenePauseController.h" />
     <ClInclude Include="Source\Scene\GameScene\GameSceneUpdate.h" />
     <ClInclude Include="Source\Scene\GameScene\GameSceneVisualPalette.h" />
     <ClInclude Include="Source\Scene\GameScene\GameSceneWorldActors.h" />
@@ -242,6 +249,7 @@
     <None Include="BUILD_NOTES.md" />
     <None Include="package.ps1" />
     <None Include="README.md" />
+    <None Include="README_JP.md" />
     <None Include="settings.manifest" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
