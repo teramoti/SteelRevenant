@@ -22,10 +22,10 @@ namespace
         switch (archetype)
         {
         case Action::EnemyArchetype::BladeRush:
-            return Color(0.96f, 0.38f, 0.24f, 1.0f);
+            return Color(1.00f, 0.74f, 0.18f, 1.0f);
         case Action::EnemyArchetype::BladeFlank:
         default:
-            return Color(1.0f, 0.82f, 0.26f, 1.0f);
+            return Color(1.00f, 0.86f, 0.30f, 1.0f);
         }
     }
 
@@ -34,10 +34,10 @@ namespace
         switch (archetype)
         {
         case Action::EnemyArchetype::BladeRush:
-            return Color(0.64f, 0.22f, 0.16f, 1.0f);
+            return Color(0.14f, 0.12f, 0.16f, 1.0f);
         case Action::EnemyArchetype::BladeFlank:
         default:
-            return Color(0.50f, 0.30f, 0.12f, 1.0f);
+            return Color(0.10f, 0.10f, 0.12f, 1.0f);
         }
     }
 }
@@ -92,7 +92,7 @@ namespace SceneFx
             Clamp01((armorTint.y * 0.78f + 0.06f + jitterG) * dangerTint),
             Clamp01((armorTint.z * 0.78f + 0.07f + jitterB) * dangerTint),
             1.0f);
-        profile.underColor = Color(0.06f, 0.05f, 0.07f, 1.0f);
+        profile.underColor = Color(0.02f, 0.02f, 0.025f, 1.0f);
         profile.trimColor = Color(
             Clamp01(armorTint.x * 0.44f),
             Clamp01(armorTint.y * 0.44f),
@@ -100,8 +100,20 @@ namespace SceneFx
             1.0f);
         profile.emissiveColor = emissive;
         profile.weaponColor = enemy.isHeavyEnemy
-            ? Color(0.24f, 0.26f, 0.30f, 1.0f)
-            : Color(0.20f, 0.19f, 0.22f, 1.0f);
+            ? Color(0.10f, 0.10f, 0.12f, 1.0f)
+            : Color(0.08f, 0.08f, 0.10f, 1.0f);
+
+        profile.armorDark = Color(
+            Clamp01(profile.armorDark.x * 0.42f),
+            Clamp01(profile.armorDark.y * 0.42f),
+            Clamp01(profile.armorDark.z * 0.46f),
+            1.0f);
+        profile.armorLight = Color(
+            Clamp01(profile.armorLight.x * 0.55f),
+            Clamp01(profile.armorLight.y * 0.55f),
+            Clamp01(profile.armorLight.z * 0.62f),
+            1.0f);
+        profile.trimColor = Color(0.10f, 0.10f, 0.12f, 1.0f);
 
         if (enemy.state == Action::EnemyStateType::Attack)
         {

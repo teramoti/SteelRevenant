@@ -150,7 +150,7 @@ namespace Action
 		}
 
 		Vector3 moveForward = Utility::MathEx::SafeNormalize(Vector3(cameraForward.x, 0.0f, cameraForward.z));
-		Vector3 moveRight = Utility::MathEx::SafeNormalize(Vector3(cameraRight.x, 0.0f, cameraRight.z));
+		Vector3 moveRight = Utility::MathEx::SafeNormalize(Vector3(-cameraRight.x, 0.0f, -cameraRight.z));
 		if (moveForward.LengthSquared() <= 0.0001f)
 		{
 			moveForward = Vector3(std::sin(player.yaw), 0.0f, std::cos(player.yaw));
@@ -168,7 +168,7 @@ namespace Action
 		const float slideCooldownTime = 1.0f;
 		const float slideSpeed = 12.0f;
 
-		if (!player.isSliding && player.slideCooldown <= 0.0f && slideInput)
+		if (!player.isSliding && player.slideCooldown <= 0.0f && slideInput && player.attackPhase == PlayerAttackPhase::Idle)
 		{
 			player.isSliding = true;
 			player.slideTimer = slideDuration;

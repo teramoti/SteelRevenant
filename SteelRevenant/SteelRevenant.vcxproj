@@ -99,7 +99,6 @@
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Source\Scene\GameScene\FollowCameraController.cpp" />
     <ClCompile Include="Source\Scene\GameScene\GameScenePauseController.cpp" />
-    <ClCompile Include="Source\Scene\GameScene\SlashHitEffectSystem.cpp" />
     <ClCompile Include="Window.cpp" />
     <!-- Action -->
     <ClCompile Include="Source\Action\AStarSolver.cpp" />
@@ -136,6 +135,7 @@
     </ClCompile>
     <ClCompile Include="Source\Scene\GameScene\GameSceneWorldRender.cpp" />
     <ClCompile Include="Source\Scene\GameScene\PlayerVisualProfile.cpp" />
+    <ClCompile Include="Source\Scene\GameScene\SlashHitEffectSystem.cpp" />
     <ClCompile Include="Source\Scene\GameScene\StageFloorStyle.cpp" />
     <!-- Visual/ サブフォルダ（旧直下の重複版は削除済み） -->
     <ClCompile Include="Source\Scene\GameScene\Visual\GameSceneWorldActors.cpp" />

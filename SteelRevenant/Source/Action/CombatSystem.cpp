@@ -524,23 +524,22 @@ namespace Action
 						const float lateralSq = std::max(0.0f, toPlayer.LengthSquared() - alongBeam * alongBeam);
 						if (alongBeam > 0.0f && alongBeam <= beamRange && lateralSq <= beamRadius * beamRadius)
 						{
-							float damagePerSec = 2.2f * enemy.timeDamageMultiplier;
-							if (player.isSliding)
+							if (!player.isSliding)
 							{
-								damagePerSec *= 0.35f;
-							}
-							const float drain = damagePerSec * dt;
-							gameState.stageTimer = std::max(0.0f, gameState.stageTimer - drain);
-							gameState.damageTaken += static_cast<int>(std::round(drain * 10.0f));
-							if (gameState.stageTimer <= 0.0f)
-							{
-								gameState.stageTimer = 0.0f;
-								gameState.timeExpired = true;
-							}
-							if (player.damageGraceTimer <= 0.0f)
-							{
-								player.damageGraceTimer = m_tuning.damageGraceSec;
-								GameAudio::AudioSystem::GetInstance().PlaySe(GameAudio::SeId::PlayerHit, 0.9f);
+								float damagePerSec = 2.2f * enemy.timeDamageMultiplier;
+								const float drain = damagePerSec * dt;
+								gameState.stageTimer = std::max(0.0f, gameState.stageTimer - drain);
+								gameState.damageTaken += static_cast<int>(std::round(drain * 10.0f));
+								if (gameState.stageTimer <= 0.0f)
+								{
+									gameState.stageTimer = 0.0f;
+									gameState.timeExpired = true;
+								}
+								if (player.damageGraceTimer <= 0.0f)
+								{
+									player.damageGraceTimer = m_tuning.damageGraceSec;
+									GameAudio::AudioSystem::GetInstance().PlaySe(GameAudio::SeId::PlayerHit, 0.9f);
+								}
 							}
 						}
 					}
@@ -789,7 +788,7 @@ namespace Action
 					const float attackReach = m_tuning.enemyMeleeAttackReach * enemy.attackRangeScale;
 					if (distToPlayer <= attackReach)
 					{
-						if (player.damageGraceTimer <= 0.0f)
+						if (player.damageGraceTimer <= 0.0f && !player.isSliding)
 						{
 							const float dangerBoost = static_cast<float>(std::max(0, gameState.dangerLevel - 1));
 							float damage = (m_tuning.enemyMeleeDamageBase + dangerBoost * m_tuning.enemyMeleeDamagePerDanger) * enemy.attackDamageScale;

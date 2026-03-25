@@ -1,4 +1,4 @@
-#include "SurvivalDirector.h"
+﻿#include "SurvivalDirector.h"
 
 #include <algorithm>
 #include <cmath>
@@ -93,7 +93,7 @@ namespace Action
 		const float dangerPressure = static_cast<float>(std::max(0, m_dangerLevel - 1));
 		m_spawnIntervalSec = std::max(
 			ruleBook.GetMinSpawnIntervalSec(),
-			ruleBook.GetBaseSpawnIntervalSec() - wavePressure * 0.02f - dangerPressure * 0.006f);
+			ruleBook.GetBaseSpawnIntervalSec() - wavePressure * 0.015f - dangerPressure * 0.004f);
 
 		// Respect ruleBook minimum; avoid additional aggressive scaling here to reduce spawn burstiness
 		m_spawnIntervalSec = std::max(ruleBook.GetMinSpawnIntervalSec(), m_spawnIntervalSec);
@@ -103,7 +103,7 @@ namespace Action
 		{
 			const float urgency = static_cast<float>(desiredAlive - livingEnemyCount) /
 				static_cast<float>(std::max(1, desiredAlive));
-			m_spawnCooldownSec = std::max(0.0f, m_spawnCooldownSec - dt * (1.0f + urgency * 2.4f));
+			m_spawnCooldownSec = std::max(0.0f, m_spawnCooldownSec - dt * (0.70f + urgency * 0.90f));
 		}
 		else
 		{
@@ -121,7 +121,7 @@ namespace Action
 		// Use stage-defined opening count directly (do not force a minimum here)
 		const int openingFromRule = ruleBook.GetOpeningAliveCount();
 		const int openingCount = (std::min)(openingFromRule, m_maxAliveCount);
-		m_spawnCooldownSec = m_spawnIntervalSec * 0.35f;
+		m_spawnCooldownSec = std::max(0.40f, m_spawnIntervalSec * 0.60f);
 
 		char buf[256];
 		sprintf_s(buf, "BuildInitialSpawn - Stage=%d openingRule=%d m_maxAlive=%d openingCount=%d\n",
@@ -158,18 +158,17 @@ namespace Action
 		const int desiredAlive = (std::min)(m_targetAliveCount, m_maxAliveCount);
 		const int deficit = std::max(0, desiredAlive - livingEnemyCount);
 		const int roomToMax = std::max(0, m_maxAliveCount - livingEnemyCount);
-		const bool emergencyFill = livingEnemyCount <= std::max(1, desiredAlive / 2);
-		const int burstBonus = emergencyFill ? std::max(1, deficit / 2) : std::max(0, deficit / 3);
-		const int spawnCount = (std::min)(
-			roomToMax,
-			(std::min)(deficit, m_spawnBatch + burstBonus));
+		const bool emergencyFill = livingEnemyCount <= std::max(1, desiredAlive / 3);
+		const int earlyWaveCap = (m_currentWave <= 2) ? 2 : 3;
+		const int batchCap = std::max(1, std::min(m_spawnBatch + (emergencyFill ? 1 : 0), earlyWaveCap));
+		const int spawnCount = (std::min)(roomToMax, (std::min)(deficit, batchCap));
 
 		if (spawnCount <= 0)
 		{
 			return {};
 		}
 
-		m_spawnCooldownSec = emergencyFill ? (m_spawnIntervalSec * 0.18f) : m_spawnIntervalSec;
+		m_spawnCooldownSec = emergencyFill ? (m_spawnIntervalSec * 0.72f) : m_spawnIntervalSec;
 		return BuildEnemies(spawnPoints, spawnCount);
 	}
 
@@ -210,15 +209,19 @@ namespace Action
 			return false;
 		}
 
-		// Prefer constant-refill behavior: if below desired alive, allow spawn regardless of cooldown
 		const int desiredAlive = (std::min)(m_targetAliveCount, m_maxAliveCount);
-		if (livingEnemyCount < desiredAlive)
+		const bool emergencyFill = livingEnemyCount <= std::max(1, desiredAlive / 3);
+		if (emergencyFill)
 		{
-			return true;
+			return m_spawnCooldownSec <= (m_spawnIntervalSec * 0.35f);
 		}
 
-		const bool emergencyFill = livingEnemyCount <= std::max(1, m_targetAliveCount / 2);
-		return emergencyFill || m_spawnCooldownSec <= 0.0f;
+		if (livingEnemyCount < desiredAlive)
+		{
+			return m_spawnCooldownSec <= 0.0f;
+		}
+
+		return m_spawnCooldownSec <= 0.0f;
 	}
 
 	int SurvivalDirector::GetCurrentWave() const
@@ -317,12 +320,10 @@ namespace Action
 		m_maxAliveCount = ruleBook.GetMaxAliveCount();
 		m_targetAliveCount = BuildWaveTargetAliveCount(m_currentWave);
 		m_spawnBatch = Utility::MathEx::Clamp(
-			ruleBook.GetBaseSpawnBatch() + (m_currentWave - 1),
+			ruleBook.GetBaseSpawnBatch() + ((m_currentWave - 1) / 2),
 			ruleBook.GetBaseSpawnBatch(),
 			ruleBook.GetMaxSpawnBatch());
-		// Keep spawn batch conservative to avoid overwhelming the player
-		m_spawnBatch = std::min(m_spawnBatch, ruleBook.GetMaxSpawnBatch());
-		m_spawnCooldownSec = 0.0f;
+		m_spawnCooldownSec = std::max(0.45f, m_spawnIntervalSec * 0.85f);
 		m_waveBreak = false;
 		m_completed = false;
 

@@ -1,7 +1,8 @@
 {
   "ExpandedNodes": [
     "",
-    "\\SteelRevenant"
+    "\\SteelRevenant",
+    "\\SteelRevenant\\Assets\\Audio\\Bgm"
   ],
   "SelectedNode": "\\SteelRevenant\\SteelRevenant.sln",
   "PreviewInSolutionExplorer": false

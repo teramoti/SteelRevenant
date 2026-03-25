@@ -384,17 +384,20 @@ void StageSelectScene::Render()
     ui->Draw(batch, L"攻略メモ", Vector2(detailX + 14.0f * uiScale, detailY + 252.0f * uiScale), accentStyle, 0.58f * uiScale);
     ui->Draw(batch, tacticalMemo, Vector2(detailX + 14.0f * uiScale, detailY + 270.0f * uiScale), bodyStyle, 0.56f * uiScale);
 
-    // 数値情報
+    // numeric info (secondary)
     const std::wstring timeText = UiUtil::ToWStringFixed(selectedRule.stageStartTimeSec, 0) + L" 秒";
+    const std::wstring relayText = std::to_wstring(selectedRule.requiredRelayCount) + L" 回";
     const std::wstring aliveText = std::to_wstring(selectedRule.maxAliveCount);
     const std::wstring waveText = std::to_wstring(selectedRule.totalWaveCount);
 
     ui->Draw(batch, L"制限時間", Vector2(detailX + 14.0f * uiScale, detailY + 322.0f * uiScale), accentStyle, 0.58f * uiScale);
     ui->Draw(batch, timeText, Vector2(detailX + 130.0f * uiScale, detailY + 322.0f * uiScale), bodyStyle, 0.58f * uiScale);
-    ui->Draw(batch, L"同時上限", Vector2(detailX + 14.0f * uiScale, detailY + 348.0f * uiScale), accentStyle, 0.58f * uiScale);
-    ui->Draw(batch, aliveText, Vector2(detailX + 130.0f * uiScale, detailY + 348.0f * uiScale), bodyStyle, 0.58f * uiScale);
-    ui->Draw(batch, L"WAVE数", Vector2(detailX + 14.0f * uiScale, detailY + 374.0f * uiScale), accentStyle, 0.58f * uiScale);
-    ui->Draw(batch, waveText, Vector2(detailX + 130.0f * uiScale, detailY + 374.0f * uiScale), bodyStyle, 0.58f * uiScale);
+    ui->Draw(batch, L"リレー目標", Vector2(detailX + 14.0f * uiScale, detailY + 348.0f * uiScale), accentStyle, 0.58f * uiScale);
+    ui->Draw(batch, relayText, Vector2(detailX + 130.0f * uiScale, detailY + 348.0f * uiScale), bodyStyle, 0.58f * uiScale);
+    ui->Draw(batch, L"同時上限", Vector2(detailX + 14.0f * uiScale, detailY + 374.0f * uiScale), accentStyle, 0.58f * uiScale);
+    ui->Draw(batch, aliveText, Vector2(detailX + 130.0f * uiScale, detailY + 374.0f * uiScale), bodyStyle, 0.58f * uiScale);
+    ui->Draw(batch, L"WAVE数", Vector2(detailX + 14.0f * uiScale, detailY + 400.0f * uiScale), accentStyle, 0.58f * uiScale);
+    ui->Draw(batch, waveText, Vector2(detailX + 130.0f * uiScale, detailY + 400.0f * uiScale), bodyStyle, 0.58f * uiScale);
 
     const std::array<Color, kStageCount> accents =
     {
@@ -446,6 +449,7 @@ void StageSelectScene::Render()
             + (stageRule.missionName != nullptr ? std::wstring(stageRule.missionName) : L"");
         const std::wstring cardSummary = stageRule.missionSummary != nullptr ? stageRule.missionSummary : L"";
         const std::wstring cardTime = UiUtil::ToWStringFixed(stageRule.stageStartTimeSec, 0) + L"秒";
+        const std::wstring cardRelay = L"リレー " + std::to_wstring(stageRule.requiredRelayCount) + L"回";
 
         ui->Draw(batch, cardTitle, drawPos + Vector2(18.0f * uiScale, 14.0f * uiScale), selected ? accentStyle : titleStyle, (selected ? 0.92f : 0.88f) * uiScale);
         ui->Draw(
@@ -455,6 +459,7 @@ void StageSelectScene::Render()
             bodyStyle,
             0.56f * uiScale);
         ui->Draw(batch, cardTime, drawPos + Vector2(drawSize.x - 84.0f * uiScale, 18.0f * uiScale), bodyStyle, 0.58f * uiScale);
+        ui->Draw(batch, cardRelay, drawPos + Vector2(drawSize.x - 132.0f * uiScale, 50.0f * uiScale), bodyStyle, 0.52f * uiScale);
     }
 
     ui->Draw(

@@ -1,7 +1,6 @@
-﻿# SteelRevenant
 # SteelRevenant
 
-DirectX 11 / DirectXTK を使用した3Dアクションゲームです。近接戦闘・ロックオン・ウェーブサバイバル形式のステージで構成されています。
+SteelRevenant is a small DirectXTK-based action prototype focusing on primitive melee gameplay.
 
 Requirements
 - Windows, Visual Studio 2019 or 2022
@@ -22,14 +21,16 @@ Controls
 - Attack: Left click
 - Guard: Right click
 - Slide: Hold Shift
-- ロックオン切替: Tab
+- Toggle UI: Tab
 - Back: Esc
 
 Notes
 - Source files should be saved as UTF-8.
-- Audio resources are expected under `Assets/Audio`.
-- If audio does not play, confirm that the WAV files exist in `Assets/Audio` and that the AudioSystem was initialized with the correct root path.
+- Audio resources are expected under `Resources/Sound`.
+- If audio does not play, confirm that the WAV files exist in `Resources/Sound` and that the AudioSystem was initialized with the correct root path.
 
 Development
-- The project contains a combat system, enemy behaviors, and stage rule definitions.
-- Title screen has an attract demo mode that starts after a period of inactivity.
+- The project contains a simple combat system, enemy behaviors, and stage rule definitions.
+- Title screen has a simple attract demo mode that starts after a period of inactivity.
+
+See `BUILD_NOTES.md` for more detailed build information.

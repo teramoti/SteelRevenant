@@ -112,6 +112,7 @@ namespace Action
 			// スライド関連
 			bool isSliding;
 			float slideTimer;
+			float slideDurationTotal;
 			float slideCooldown;
 			DirectX::SimpleMath::Vector3 slideDirection;
 		DirectX::SimpleMath::Vector3 position;
@@ -162,6 +163,8 @@ namespace Action
 		isSliding(false)
 		,
 		slideTimer(0.0f)
+		,
+		slideDurationTotal(0.0f)
 		,
 		slideCooldown(0.0f)
 		,

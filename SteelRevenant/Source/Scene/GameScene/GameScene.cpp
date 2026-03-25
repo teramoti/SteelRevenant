@@ -289,8 +289,8 @@ Action::InputSnapshot GameScene::BuildInputSnapshot(float dt) const
     snap.mouseDelta   = input.GetMouseDelta();
     snap.moveForward  = input.IsKeyDown(DirectX::Keyboard::W);
     snap.moveBack     = input.IsKeyDown(DirectX::Keyboard::S);
-    snap.moveLeft     = input.IsKeyDown(DirectX::Keyboard::D);
-    snap.moveRight    = input.IsKeyDown(DirectX::Keyboard::A);
+    snap.moveLeft     = input.IsKeyDown(DirectX::Keyboard::A);
+    snap.moveRight    = input.IsKeyDown(DirectX::Keyboard::D);
     snap.slideHeld    = input.IsKeyDown(DirectX::Keyboard::LeftShift) || input.IsKeyDown(DirectX::Keyboard::RightShift);
     snap.attackPressed= input.IsMouseButtonPressed(0);
     snap.guardHeld    = input.IsMouseButtonDown(1);
